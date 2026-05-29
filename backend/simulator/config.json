@@ -1,0 +1,26 @@
+{
+  "interval_seconds": 10,
+  "api_url": "http://localhost:8000",
+  "devices": [
+    {"device_id": "device-001", "failure_rate": 0},
+    {"device_id": "device-002", "failure_rate": 0},
+    {"device_id": "device-003", "failure_rate": 0},
+    {"device_id": "device-004", "failure_rate": 0},
+    {"device_id": "device-005", "failure_rate": 0},
+    {"device_id": "device-006", "failure_rate": 0},
+    {"device_id": "device-007", "failure_rate": 0},
+    {"device_id": "device-008", "failure_rate": 0},
+    {"device_id": "device-009", "failure_rate": 0},
+    {"device_id": "device-010", "failure_rate": 0},
+    {"device_id": "device-011", "failure_rate": 0},
+    {"device_id": "device-012", "failure_rate": 0},
+    {"device_id": "device-013", "failure_rate": 0},
+    {"device_id": "device-014", "failure_rate": 0},
+    {"device_id": "device-015", "failure_rate": 0},
+    {"device_id": "device-016", "failure_rate": 0},
+    {"device_id": "device-017", "failure_rate": 0},
+    {"device_id": "device-018", "failure_rate": 0},
+    {"device_id": "device-019", "failure_rate": 0},
+    {"device_id": "device-020", "failure_rate": 0}
+  ]
+}

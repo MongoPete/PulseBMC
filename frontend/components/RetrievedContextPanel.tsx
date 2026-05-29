@@ -1,0 +1,95 @@
+"use client";
+import { useState } from "react";
+
+interface RetrievedDoc {
+  collection: string;
+  doc_id: string;
+  similarity?: number;
+  summary: string;
+}
+
+interface Props {
+  docs: RetrievedDoc[];
+  agentRunId?: string;
+}
+
+export default function RetrievedContextPanel({ docs, agentRunId }: Props) {
+  const [open, setOpen] = useState(false);
+
+  if (!docs || docs.length === 0) return null;
+
+  const topScore = Math.max(...docs.map((d) => d.similarity ?? 0));
+
+  return (
+    <div className="rounded-xl overflow-hidden border border-slate-700/60 bg-slate-900/40">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="w-full flex items-center justify-between px-4 py-3 hover:bg-slate-800/40 transition-colors"
+      >
+        <span className="flex items-center gap-3">
+          {/* Vector Search icon */}
+          <span className="flex items-center justify-center w-6 h-6 rounded-md bg-indigo-500/15 text-indigo-400 text-xs font-bold shrink-0">
+            ⟳
+          </span>
+          <span className="text-sm text-slate-200">
+            Atlas Vector Search · {docs.length} similar past failure{docs.length !== 1 ? "s" : ""} retrieved
+          </span>
+          <span className="text-xs text-slate-500 font-mono bg-slate-800 px-1.5 py-0.5 rounded">
+            {(topScore * 100).toFixed(0)}% top match
+          </span>
+        </span>
+        <span className="text-slate-400 text-xs">{open ? "▾" : "▸"}</span>
+      </button>
+
+      {open && (
+        <div className="border-t border-slate-700/50 bg-slate-950/60 p-4 space-y-3">
+          <p className="text-sm text-slate-400 leading-relaxed">
+            Semantically similar past failures retrieved via{" "}
+            <span className="text-indigo-400 font-mono">$vectorSearch</span> using{" "}
+            <span className="text-slate-300">Voyage AI voyage-4-large</span> embeddings.
+            Matches on meaning, not just error codes —{" "}
+            <span className="text-slate-300">no SQL equivalent.</span>
+          </p>
+
+          <div className="space-y-2">
+            {docs.map((doc, i) => {
+              const pct = Math.round((doc.similarity ?? 0) * 100);
+              return (
+                <div key={i} className="flex items-start gap-3 bg-slate-900/60 rounded-lg p-3 border border-slate-800/60">
+                  {/* Similarity bar */}
+                  <div className="flex flex-col items-center gap-1 shrink-0 w-10 pt-0.5">
+                    <div className="h-8 w-1.5 bg-slate-800 rounded-full overflow-hidden flex flex-col justify-end">
+                      <div
+                        className="w-full rounded-full bg-indigo-500/70 transition-all"
+                        style={{ height: `${pct}%` }}
+                      />
+                    </div>
+                    <span className="text-xs text-slate-300 font-mono">{pct}%</span>
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-xs font-mono text-slate-400">{doc.collection}</span>
+                      <span className="text-slate-700">·</span>
+                      <span className="text-xs text-slate-400 font-mono">…{doc.doc_id.slice(-8)}</span>
+                    </div>
+                    {doc.summary && (
+                      <p className="text-sm text-slate-300 leading-relaxed">{doc.summary}</p>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {agentRunId && (
+            <p className="text-xs text-slate-400 pt-1">
+              Agent run <span className="font-mono text-slate-400">{agentRunId.slice(-8)}</span>
+              {" "}· full trace stored in{" "}
+              <span className="font-mono text-yellow-400">agent_runs</span> collection
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}

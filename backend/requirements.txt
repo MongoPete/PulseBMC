@@ -1,0 +1,15 @@
+fastapi
+uvicorn[standard]
+motor
+pymongo
+pydantic
+pydantic-settings
+python-dotenv
+langchain
+langchain-openai
+langchain-community
+openai
+voyageai
+langchain-mcp-adapters
+httpx
+sse-starlette
