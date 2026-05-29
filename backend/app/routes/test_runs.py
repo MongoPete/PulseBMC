@@ -3,6 +3,7 @@ import json
 from datetime import datetime
 from fastapi import APIRouter, BackgroundTasks, Query
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
 from app.db import get_db
 from app.models.test_run import TestRunCreate
 from app.models.common import QueryInfo
@@ -169,6 +170,20 @@ async def list_test_runs(
             index_hint="Uses index: { device_id: 1, started_at: -1 }" if device_id else "Uses index: { started_at: -1 }",
         ).model_dump(),
     }
+
+
+class StartCyclePayload(BaseModel):
+    device_ids: list[str]
+
+
+@router.post("/fleet/start-cycle", status_code=200)
+async def fleet_start_cycle(payload: StartCyclePayload):
+    """Called by the simulator at the start of each test cycle to show amber state.
+    Pushes an SSE amber event for each device — no database write."""
+    ts = datetime.utcnow().isoformat()
+    for device_id in payload.device_ids:
+        notify_sse(device_id, "amber", "running", ts)
+    return {"notified": len(payload.device_ids)}
 
 
 @router.get("/fleet/states")

@@ -218,6 +218,58 @@ async def control_simulator(action: str):
     return {"error": f"unknown action '{action}'", "running": sim_control.is_running()}
 
 
+@router.post("/demo/rerun/{device_id}")
+async def rerun_device(device_id: str):
+    """Immediately emit one test run for the specified device — useful from the control-plane
+    context menu without waiting for the next simulator cycle."""
+    import random
+    from app.routes.test_runs import notify_sse, _check_and_create_alert
+
+    db = get_db()
+    now = datetime.utcnow()
+    # Check if device is currently in burst/trending mode
+    force_fail = device_id in _demo_overrides["burst_failure"]
+    fail_rate = 0.15 if device_id in _demo_overrides["trending_failure"] else (1.0 if force_fail else 0.05)
+    failed = force_fail or (random.random() < fail_rate)
+    error_codes = ["LB_TIMEOUT", "CONTINUITY_FAIL", "SIGNAL_INTEGRITY_ERR"]
+    doc = {
+        "device_id": device_id,
+        "pattern_id": "loopback_v1",
+        "started_at": now,
+        "completed_at": now,
+        "duration_ms": random.randint(180, 520),
+        "status": "fail" if failed else "pass",
+        "led_state": "red" if failed else "green",
+        "results": {
+            "overall": "fail" if failed else "pass",
+            "components": [{
+                "component_id": "pcie_card_1",
+                "result": "fail" if failed else "pass",
+                "error_code": random.choice(error_codes) if failed else None,
+                "core_results": [],
+            }],
+        },
+        "triggered_by": "control_plane_rerun",
+    }
+    result = await db.test_runs.insert_one(doc)
+    notify_sse(device_id, doc["led_state"], doc["status"], now.isoformat(),
+               event_type="demo", message=f"Manual rerun triggered on {device_id}")
+    if failed:
+        await _check_and_create_alert(device_id, str(result.inserted_id))
+    return {"status": "rerun_triggered", "device_id": device_id, "result": doc["status"]}
+
+
+@router.post("/demo/set-failure-mode")
+async def set_failure_mode(device_id: str = Query(...), mode: str = Query("none")):
+    """Set a device's failure mode for the next simulator cycle.
+    Accepted modes: none | intermittent | sticky | silent"""
+    _demo_overrides.setdefault("failure_modes", {})[device_id] = mode
+    # For sticky: unlock latching so the device can enter a fresh sticky cycle
+    if mode == "none":
+        _demo_overrides.setdefault("reset_devices", set()).add(device_id)
+    return {"device_id": device_id, "failure_mode": mode}
+
+
 @router.get("/demo/state")
 async def get_demo_state():
     return {
@@ -225,4 +277,6 @@ async def get_demo_state():
         "trending_failure_devices": list(_demo_overrides["trending_failure"]),
         "offline_buffer": _demo_overrides["offline_buffer"],
         "simulator_running": sim_control.is_running(),
+        "reset_devices": list(_demo_overrides.get("reset_devices", set())),
+        "failure_modes": _demo_overrides.get("failure_modes", {}),
     }

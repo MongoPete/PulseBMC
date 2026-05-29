@@ -36,21 +36,25 @@ async def run_work_order(
     rca: RootCauseAnalysis,
     similar_incidents: list[dict],
     device_id: str,
+    device_location: str | None = None,
 ) -> WorkOrder:
     similar_summaries = "\n".join([
         f"- {s.get('embedding_text', '')} (similarity: {s.get('score', 0):.2f})"
         for s in similar_incidents[:5]
     ])
 
+    location_line = f"Location: {device_location}\n" if device_location else ""
+
     prompt = ChatPromptTemplate.from_messages([
         ("system", SYSTEM_PROMPT),
         ("human", (
             f"Device: {device_id}\n"
+            f"{location_line}"
             f"Root cause: {rca.root_cause_hypothesis}\n"
             f"Confidence: {rca.confidence:.0%}\n"
             f"Evidence: {'; '.join(rca.evidence[:3])}\n\n"
             f"Similar past incidents that informed this analysis:\n{similar_summaries or 'None'}\n\n"
-            "Generate the work order as JSON."
+            "Generate the work order as JSON. Reference the physical location in the repair steps if provided."
         )),
     ])
 

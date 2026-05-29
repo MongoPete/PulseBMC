@@ -2,19 +2,46 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import ConceptBar from "@/components/ConceptBar";
 import LedIndicator from "@/components/LedIndicator";
+import type { LedState } from "@/components/LedIndicator";
 import TelemetryChart from "@/components/TelemetryChart";
-import DocumentViewer from "@/components/DocumentViewer";
 import QueryTooltip from "@/components/QueryTooltip";
-import GuidedTour, { TourCard, WhyBox, Pill } from "@/components/GuidedTour";
 import { api, SSE_URL } from "@/lib/api";
 import { fmtTime, fmtDateTime } from "@/lib/time";
-import type { Step } from "react-joyride";
 
 const DATE_FIELDS = new Set(["last_seen", "registered_at", "created_at", "updated_at", "started_at", "completed_at"]);
 
-type LedState = "green" | "flashing_green" | "red" | "off";
+interface CoreResult {
+  core_id: string;
+  result: string;
+  temp_c?: number;
+  latency_ms?: number;
+}
+
+interface ComponentResult {
+  component_id: string;
+  result: string;
+  error_code?: string;
+  corruption_detected?: boolean;
+  corruption_crc?: string;
+  core_results?: CoreResult[];
+}
+
+interface HoveredCell {
+  componentId: string;
+  compResult: string;
+  errorCode?: string;
+  corruptionDetected?: boolean;
+  corruptionCrc?: string;
+  coreId: string;
+  coreIndex: number;
+  coreResult: string;
+  temp?: number;
+  latencyMs?: number;
+  isLatched: boolean;
+  failureMode?: string;
+  trueFaultSource?: string;
+}
 
 interface TestRun {
   id: string;
@@ -22,133 +49,45 @@ interface TestRun {
   status: string;
   led_state: LedState;
   duration_ms: number;
-  results: { overall: string; components: Array<{ component_id: string; result: string; error_code?: string }> };
+  results: {
+    overall: string;
+    components: ComponentResult[];
+  };
+  failure_mode?: string;
+  true_fault_source?: string;
+  nvme_smart?: {
+    critical_warning: number;
+    temperature: number;
+    available_spare: number;
+    percentage_used: number;
+    power_on_hours: number;
+    unsafe_shutdowns: number;
+    media_errors: number;
+    num_err_log_entries: number;
+  };
+  nvme_errors?: Array<{ error_count: number; description: string; status_field: number }>;
 }
 
-const DEVICE_TOUR_STEPS: Step[] = [
-  {
-    target: "#core-grid",
-    title: "Core Health Grid — reading PCIe failures",
-    content: (
-      <TourCard>
-        <p>
-          This grid shows the health of every CPU core across all PCIe components on this device.
-          Each <strong>row</strong> = one PCIe component. Each <strong>cell</strong> = one CPU core.
-        </p>
-        <p>
-          <span className="inline-flex items-center gap-1.5">
-            <span className="inline-block w-3 h-3 rounded-sm bg-red-500" /> Red row
-          </span>
-          {" "}= that component's loopback test failed. Every core in the row is marked red
-          because the failure is at the component (card) level, not individual cores.
-        </p>
-        <p>
-          <span className="inline-flex items-center gap-1.5">
-            <span className="inline-block w-3 h-3 rounded-sm bg-green-400/60" /> Green row
-          </span>
-          {" "}= loopback passed within the 400 ms timeout.
-        </p>
-        <WhyBox>
-          In SQL this would be a JOIN across 3 tables. Here it's one read of the embedded
-          components array inside a single <Pill>test_runs</Pill> document.
-        </WhyBox>
-      </TourCard>
-    ),
-  },
-  {
-    target: "#sse-badge",
-    title: "Live updates via Change Streams",
-    content: (
-      <TourCard>
-        <p>
-          This page listens to <strong>Atlas Change Streams</strong> — a real-time event feed
-          that fires the moment a new test run document is written to the cluster.
-        </p>
-        <p>
-          When the simulator writes a result for this device, the LED and grid update here
-          in under a second. No polling, no refresh.
-        </p>
-        <p className="text-gray-300 text-xs">
-          SQL equivalent: PostgreSQL <code>LISTEN/NOTIFY</code> or Debezium CDC on MySQL.
-          Atlas Change Streams need zero extra infrastructure.
-        </p>
-        <WhyBox>
-          Real-time hardware telemetry without Kafka, Redis, or a change-data-capture pipeline.
-        </WhyBox>
-      </TourCard>
-    ),
-  },
-  {
-    target: "#doc-viewer",
-    title: "The raw MongoDB document",
-    content: (
-      <TourCard>
-        <p>
-          Click to expand — this is the exact document stored in Atlas for the latest test run.
-          It contains the <em>overall result</em> and <em>every component result</em> nested inside it.
-        </p>
-        <p>
-          In a relational database you'd split this across:
-          a <code>test_runs</code> table, a <code>test_run_components</code> child table,
-          and need a JOIN to read them together.
-        </p>
-        <p>
-          The <span className="text-yellow-400 font-mono">embedding</span> field is a 1,024-number
-          vector that enables semantic similarity search — no SQL equivalent.
-        </p>
-        <WhyBox>
-          One document read. No JOIN. The query the dashboard uses is a single indexed
-          <Pill>find</Pill> — sub-millisecond even at scale.
-        </WhyBox>
-      </TourCard>
-    ),
-  },
-  {
-    target: "#test-run-history",
-    title: "Test run history — time-series in Atlas",
-    content: (
-      <TourCard>
-        <p>
-          Each row here is one <Pill>test_runs</Pill> document, returned by a{" "}
-          <Pill>find</Pill> query sorted by <Pill>started_at</Pill> descending.
-          Click any row to see the full JSON document.
-        </p>
-        <p>
-          The chart above plots pass/fail trends over time using an aggregation pipeline —
-          the same data, grouped by time bucket.
-        </p>
-        <p className="text-gray-300 text-xs">
-          SQL: <code>SELECT * FROM test_runs WHERE device_id = ? ORDER BY started_at DESC LIMIT 60</code>
-        </p>
-        <WhyBox>
-          Compound index on <code>(device_id, started_at)</code> means this query is O(log n)
-          regardless of how many runs are in the collection.
-        </WhyBox>
-      </TourCard>
-    ),
-  },
-];
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
 function MetaValue({ value }: { value: unknown }) {
-  if (value === null || value === undefined) return <span className="text-gray-400">—</span>;
+  if (value === null || value === undefined) return <span className="text-slate-400">—</span>;
   if (typeof value === "object" && !Array.isArray(value)) {
     return (
       <div className="space-y-0.5 text-right">
         {Object.entries(value as Record<string, unknown>).map(([k, v]) => (
           <div key={k} className="flex justify-end gap-1.5">
-            <span className="text-gray-400">{k}:</span>
-            <span className="text-gray-300">{String(v)}</span>
+            <span className="text-slate-400">{k}:</span>
+            <span className="text-slate-700">{String(v)}</span>
           </div>
         ))}
       </div>
     );
   }
-  return <span className="text-gray-300 truncate max-w-[200px] block" title={String(value)}>{String(value)}</span>;
+  return (
+    <span className="text-slate-700 truncate max-w-[200px] block" title={String(value)}>
+      {String(value)}
+    </span>
+  );
 }
-
-// ── Component ─────────────────────────────────────────────────────────────────
 
 export default function DevicePage() {
   const { id } = useParams<{ id: string }>();
@@ -158,6 +97,9 @@ export default function DevicePage() {
   const [ledState, setLedState] = useState<LedState>("green");
   const [sseConnected, setSseConnected] = useState(false);
   const [expandedRun, setExpandedRun] = useState<string | null>(null);
+  const [rawDataOpen, setRawDataOpen] = useState(false);
+  const [smartOpen, setSmartOpen] = useState(false);
+  const [hoveredCell, setHoveredCell] = useState<HoveredCell | null>(null);
 
   useEffect(() => {
     api.device(id as string).then(setDevice).catch(() => {});
@@ -184,218 +126,375 @@ export default function DevicePage() {
   }, [id]);
 
   const latestRun = runs[0];
-
-  // Build 16×16 grid — each row = one component, each cell = one core
   const components = latestRun?.results?.components ?? [];
-  const NUM_COMPONENTS = Math.max(components.length, 16);
-  const coreGrid: Array<{ state: LedState; componentId: string; errorCode?: string }[]> = Array.from(
-    { length: NUM_COMPONENTS },
-    (_, ci) => {
-      const comp = components[ci];
-      const state: LedState = comp?.result === "fail" ? "red" : "green";
-      return Array.from({ length: 16 }, () => ({
-        state,
-        componentId: comp?.component_id ?? `comp_${ci}`,
-        errorCode: comp?.error_code,
-      }));
-    }
-  );
-
   const failingComponents = components.filter((c) => c.result === "fail");
+  const location = device?.location as { datacenter?: string; rack?: string; slot?: string } | undefined;
+
+  const isSticky = latestRun?.failure_mode === "sticky";
 
   return (
-    <div>
-      <ConceptBar />
-      <main className="max-w-7xl mx-auto px-4 py-6">
-        {/* Breadcrumb */}
-        <div className="flex items-center gap-2 text-sm text-gray-400 mb-4">
-          <Link href="/" className="hover:text-white">Fleet</Link>
-          <span>/</span>
-          <span className="text-gray-300">{id}</span>
-        </div>
+    <main className="max-w-7xl mx-auto px-4 py-6">
+      {/* Breadcrumb */}
+      <div className="flex items-center gap-2 text-sm text-slate-400 mb-4">
+        <Link href="/" className="hover:text-slate-700">Fleet</Link>
+        <span>/</span>
+        <span className="text-slate-700">{id}</span>
+      </div>
 
-        {/* Header */}
-        <div className="flex items-start justify-between mb-6 flex-wrap gap-4">
-          <div className="flex items-center gap-4">
-            <LedIndicator state={ledState} size="lg" />
-            <div>
-              <h1 className="text-xl font-bold text-white">{id}</h1>
-              {device && (
-                <p className="text-sm text-gray-400">
-                  {(device.hostname as string) ?? ""}
-                  {" · "}
-                  {(device.location as { datacenter?: string })?.datacenter}
-                  {" · "}
-                  {(device.location as { rack?: string })?.rack}
-                </p>
-              )}
-            </div>
-          </div>
-          <div className="flex items-center gap-3">
-            <div id="sse-badge" className="flex items-center gap-2 text-xs">
-              <span className={`flex items-center gap-1.5 px-2 py-1 rounded border ${sseConnected ? "border-green-700/60 text-green-400" : "border-gray-700 text-gray-500"}`}>
-                <span className={`w-1.5 h-1.5 rounded-full ${sseConnected ? "bg-green-400 animate-pulse" : "bg-gray-600"}`} />
-                {sseConnected ? "↻ Live via Atlas Change Stream" : "Connecting..."}
-                <span className="text-gray-400 ml-1">(like a SQL trigger)</span>
-              </span>
-            </div>
-            <GuidedTour steps={DEVICE_TOUR_STEPS} label="Page Tour" stepCount={DEVICE_TOUR_STEPS.length} />
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Left column */}
-          <div className="lg:col-span-2 space-y-6">
-
-            {/* Core Health Grid */}
-            <div id="core-grid" className="bg-gray-900 border border-gray-800 rounded-lg p-5">
-              <div className="flex items-start justify-between mb-1">
-                <h2 className="text-sm font-semibold text-gray-200">16×16 Core Health Grid</h2>
-                <span className="text-xs text-gray-400">each row = one PCIe component · each cell = one CPU core</span>
-              </div>
-
-              {/* Failing components callout */}
-              {failingComponents.length > 0 && (
-                <div className="mb-3 px-3 py-2 rounded-lg bg-rose-950/30 border border-rose-800/40 text-xs text-rose-300 flex flex-wrap gap-x-4 gap-y-1">
-                  <span className="font-medium text-rose-200">Failing components:</span>
-                  {failingComponents.map((c) => (
-                    <span key={c.component_id} className="font-mono">
-                      {c.component_id}{c.error_code ? ` (${c.error_code})` : ""}
-                    </span>
-                  ))}
-                </div>
-              )}
-
-              {/* Grid with row labels */}
-              <div className="flex gap-2">
-                {/* Row labels */}
-                <div className="flex flex-col gap-0.5 pt-0.5 shrink-0">
-                  {coreGrid.map((row, ci) => (
-                    <div key={ci} className="h-4 flex items-center">
-                      <span className="text-xs font-mono text-gray-400 w-20 truncate" title={row[0].componentId}>
-                        {row[0].componentId}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-                {/* Cells */}
-                <div className="flex-1">
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(16, minmax(0, 1fr))", gap: "2px" }}>
-                    {coreGrid.flat().map((cell, i) => (
-                      <div
-                        key={i}
-                        className={`aspect-square rounded-sm ${cell.state === "red" ? "bg-red-500/90" : "bg-green-400/35"}`}
-                        title={`${cell.componentId} core ${i % 16}${cell.errorCode ? ` — ${cell.errorCode}` : ""}`}
-                      />
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              {/* Legend */}
-              <div className="flex items-center gap-5 mt-3 text-xs text-gray-300">
-                <span className="flex items-center gap-1.5">
-                  <span className="w-3 h-3 rounded-sm bg-green-400/35 inline-block" /> Pass — loopback &lt;400 ms
-                </span>
-                <span className="flex items-center gap-1.5">
-                  <span className="w-3 h-3 rounded-sm bg-red-500/90 inline-block" /> Fail — loopback timeout or error
-                </span>
-              </div>
-            </div>
-
-            {/* Telemetry Chart */}
-            <div className="bg-gray-900 border border-gray-800 rounded-lg p-4">
-              <TelemetryChart runs={runs} queryInfo={queryInfo ?? undefined} />
-            </div>
-
-            {/* Recent Test Runs */}
-            <div id="test-run-history" className="bg-gray-900 border border-gray-800 rounded-lg p-4">
-              <div className="flex items-center gap-2 mb-3">
-                <h2 className="text-sm font-semibold text-gray-200">Recent Test Runs</h2>
-                {queryInfo && (
-                  <QueryTooltip queryInfo={queryInfo as Parameters<typeof QueryTooltip>[0]["queryInfo"]} label="query" />
-                )}
-                <span className="text-gray-400 text-xs ml-1">— each row is one document in <span className="font-mono text-yellow-400">test_runs</span></span>
-              </div>
-              <div className="space-y-1">
-                {runs.slice(0, 10).map((run) => (
-                  <div key={run.id}>
-                    <button
-                      onClick={() => setExpandedRun(expandedRun === run.id ? null : run.id)}
-                      className="w-full flex items-center gap-3 text-xs text-left hover:bg-gray-800 rounded px-2 py-1.5 transition-colors"
-                    >
-                      <LedIndicator state={run.led_state} size="sm" />
-                      <span className="text-gray-300 w-24 shrink-0">{fmtTime(run.started_at)}</span>
-                      <span className={`w-10 shrink-0 font-medium ${run.status === "fail" ? "text-red-400" : "text-green-400"}`}>{run.status.toUpperCase()}</span>
-                      <span className="text-gray-400">{run.duration_ms} ms</span>
-                      {run.results?.components?.filter(c => c.result === "fail").map(c => (
-                        <span key={c.component_id} className="text-rose-400 font-mono">{c.component_id}</span>
-                      ))}
-                      <span className="text-gray-400 ml-auto">{expandedRun === run.id ? "▾" : "▸"} JSON</span>
-                    </button>
-                    {expandedRun === run.id && (
-                      <pre className="text-xs text-gray-400 bg-gray-950 rounded p-3 mt-1 overflow-auto max-h-48">
-                        {JSON.stringify(run, null, 2)}
-                      </pre>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {/* Right column */}
-          <div className="space-y-4">
-            {/* Document Viewer */}
-            <div id="doc-viewer">
-              {latestRun && (
-                <DocumentViewer
-                  doc={latestRun as unknown as Record<string, unknown>}
-                  title="Latest test_run document"
-                />
-              )}
-            </div>
-
-            {/* Device metadata */}
+      {/* Header */}
+      <div className="flex items-start justify-between mb-6 flex-wrap gap-4">
+        <div className="flex items-center gap-4">
+          <LedIndicator state={ledState} size="lg" />
+          <div>
+            <h1 className="text-xl font-bold text-slate-800">{id}</h1>
             {device && (
-              <div className="bg-gray-900 border border-gray-800 rounded-lg p-4">
-                <h3 className="text-sm font-semibold text-gray-200 mb-3">Device Metadata</h3>
-                <div className="space-y-2.5 text-xs">
-                  {Object.entries(device)
-                    .filter(([k]) => !["id", "embedding", "_id"].includes(k))
-                    .map(([k, v]) => (
-                      <div key={k} className="flex items-start justify-between gap-3">
-                        <span className="text-blue-400 font-mono shrink-0">{k}</span>
-                        {DATE_FIELDS.has(k) && typeof v === "string" ? (
-                          <span className="text-gray-300 text-right" title={String(v)}>{fmtDateTime(v)}</span>
-                        ) : (
-                          <MetaValue value={v} />
-                        )}
-                      </div>
-                    ))}
+              <>
+                <p className="text-sm text-slate-500">
+                  {(device.hostname as string) ?? ""}
+                  {location && (
+                    <span className="font-mono ml-2 text-slate-400">
+                      {[location.datacenter, location.rack, location.slot].filter(Boolean).join(" · ")}
+                    </span>
+                  )}
+                </p>
+              </>
+            )}
+          </div>
+        </div>
+        <div id="sse-badge" className="flex items-center gap-2 text-xs">
+          <span className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs ${
+            sseConnected
+              ? "border-green-200 text-green-700 bg-green-50"
+              : "border-slate-200 text-slate-500 bg-white"
+          }`}>
+            <span className={`w-1.5 h-1.5 rounded-full ${sseConnected ? "bg-green-500 animate-pulse" : "bg-slate-300"}`} />
+            {sseConnected ? "Live" : "Connecting…"}
+          </span>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+        <div className="lg:col-span-2 space-y-5">
+
+          {/* Core Health Grid */}
+          <div id="core-grid" className="bg-white border border-slate-200 rounded-lg p-5">
+            {/* Header */}
+            <div className="flex items-start justify-between mb-4">
+              <div>
+                <h2 className="text-sm font-semibold text-slate-700">Core Health Grid</h2>
+                <p className="text-[11px] text-slate-400 mt-0.5">row = PCIe component · cell = CPU core</p>
+              </div>
+              {latestRun?.true_fault_source && (
+                <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-amber-50 border border-amber-200 rounded text-[11px] text-amber-700 max-w-[220px]">
+                  <span className="shrink-0">⚠</span>
+                  <span>Upstream suspect: <span className="font-mono">{latestRun.true_fault_source}</span></span>
                 </div>
+              )}
+            </div>
+
+            {/* Failing components banner */}
+            {failingComponents.length > 0 && (
+              <div className="mb-4 px-3 py-2 rounded bg-red-50 border border-red-200 text-xs text-red-700 flex flex-wrap gap-x-3">
+                <span className="font-semibold">Failing:</span>
+                {failingComponents.map((c) => (
+                  <span key={c.component_id} className="font-mono">
+                    {c.component_id}{c.error_code ? ` (${c.error_code})` : ""}
+                  </span>
+                ))}
               </div>
             )}
 
-            {/* What you're looking at */}
-            <div className="bg-slate-800 border border-slate-600 rounded-lg p-4 space-y-3 leading-relaxed">
-              <p className="text-white font-semibold text-sm">What you're looking at</p>
-              <p className="text-sm text-slate-200">
-                <span className="text-blue-300 font-mono font-medium">test_runs</span> stores one document per loopback test.
-                Each document embeds the component results — no JOIN needed to read pass/fail per PCIe card.
-              </p>
-              <p className="text-sm text-slate-200">
-                The live LED uses <span className="text-green-300 font-medium">Atlas Change Streams</span>:
-                a real-time event that fires the moment any document in{" "}
-                <span className="text-blue-300 font-mono font-medium">test_runs</span> changes.
-              </p>
-              <p className="text-xs text-slate-400 border-t border-slate-600 pt-2">
-                SQL equivalent: stored procedure + LISTEN/NOTIFY + a separate JOIN query on every event.
-              </p>
+            {/* Component rows */}
+            {components.length === 0 ? (
+              <p className="text-xs text-slate-400 py-4 text-center">No test run data yet</p>
+            ) : (
+              <div className="space-y-4">
+                {components.map((comp, rowIdx) => {
+                  const compFailed = comp.result === "fail";
+                  const cores: CoreResult[] = comp.core_results?.length
+                    ? comp.core_results
+                    : Array.from({ length: 4 }, (_, i) => ({
+                        core_id: `core_${i}`,
+                        result: compFailed ? "fail" : "pass",
+                      }));
+
+                  return (
+                    <div key={comp.component_id}>
+                      {/* Row label */}
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${compFailed ? "bg-red-500" : "bg-green-500"}`} />
+                        <span className="text-[11px] font-mono text-slate-600 font-medium">{comp.component_id}</span>
+                        {comp.error_code && compFailed && (
+                          <span className="text-[10px] text-red-500 font-mono bg-red-50 px-1.5 py-0.5 rounded">{comp.error_code}</span>
+                        )}
+                        {comp.corruption_detected && (
+                          <span className="text-[10px] text-amber-600 font-mono bg-amber-50 px-1.5 py-0.5 rounded">
+                            CORRUPT {comp.corruption_crc}
+                          </span>
+                        )}
+                      </div>
+                      {/* Core cells */}
+                      <div className="flex gap-2 pl-4">
+                        {cores.map((core, coreIdx) => {
+                          const coreFailed = core.result === "fail";
+                          const isLatched = coreFailed && isSticky;
+                          const isCorrupted = !coreFailed && comp.corruption_detected && coreIdx === 0;
+                          const isScanning = ledState === "amber" && !coreFailed && !isCorrupted;
+                          const delay = `${(rowIdx * cores.length + coreIdx) * 110}ms`;
+
+                          // Container background
+                          let containerCls = "bg-slate-50 border-slate-200";
+                          if (isLatched) containerCls = "bg-red-100 border-red-300";
+                          else if (coreFailed) containerCls = "bg-red-50 border-red-200";
+                          else if (isCorrupted) containerCls = "bg-amber-50 border-amber-200";
+
+                          // Status dot color
+                          let dotCls = "bg-green-500";
+                          if (isScanning) dotCls = "bg-amber-400";
+                          else if (isLatched) dotCls = "bg-red-700";
+                          else if (coreFailed) dotCls = "bg-red-500";
+                          else if (isCorrupted) dotCls = "bg-amber-400";
+
+                          const hovered: HoveredCell = {
+                            componentId: comp.component_id,
+                            compResult: comp.result,
+                            errorCode: comp.error_code,
+                            corruptionDetected: comp.corruption_detected,
+                            corruptionCrc: comp.corruption_crc,
+                            coreId: core.core_id,
+                            coreIndex: coreIdx,
+                            coreResult: core.result,
+                            temp: core.temp_c,
+                            latencyMs: core.latency_ms,
+                            isLatched,
+                            failureMode: latestRun?.failure_mode,
+                            trueFaultSource: latestRun?.true_fault_source,
+                          };
+
+                          return (
+                            <div
+                              key={core.core_id}
+                              className={`relative w-11 h-11 rounded border cursor-default flex flex-col items-center justify-center gap-0.5 transition-colors ${containerCls}`}
+                              onMouseEnter={() => setHoveredCell(hovered)}
+                              onMouseLeave={() => setHoveredCell(null)}
+                            >
+                              <div
+                                className={`w-3 h-3 rounded-full ${dotCls} ${isScanning ? "animate-pulse" : ""}`}
+                                style={isScanning ? { animationDelay: delay } : undefined}
+                              />
+                              <span className="text-[9px] text-slate-400 leading-none font-mono">{coreIdx}</span>
+                              {isLatched && (
+                                <span className="absolute top-0.5 right-1 text-[8px] text-red-700 font-bold leading-none">L</span>
+                              )}
+                              {isCorrupted && (
+                                <span className="absolute top-0.5 right-1 text-[8px] text-amber-600 font-bold leading-none">~</span>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Hover diagnostics strip */}
+            <div className="mt-4 min-h-[28px] flex items-center">
+              {hoveredCell ? (
+                <div className="px-3 py-1.5 bg-slate-100 rounded text-[11px] font-mono flex flex-wrap gap-x-3 gap-y-0.5 text-slate-600 w-full">
+                  <span className="text-slate-500">{hoveredCell.componentId}</span>
+                  <span className="text-slate-300">·</span>
+                  <span>{hoveredCell.coreId}</span>
+                  <span className="text-slate-300">·</span>
+                  <span className={hoveredCell.coreResult === "fail" ? "text-red-600 font-semibold" : "text-green-600"}>
+                    {hoveredCell.coreResult.toUpperCase()}
+                  </span>
+                  {hoveredCell.temp != null && (
+                    <><span className="text-slate-300">·</span><span>{hoveredCell.temp}°C</span></>
+                  )}
+                  {hoveredCell.latencyMs != null && (
+                    <><span className="text-slate-300">·</span><span>{hoveredCell.latencyMs}ms</span></>
+                  )}
+                  {hoveredCell.errorCode && hoveredCell.coreResult === "fail" && (
+                    <><span className="text-slate-300">·</span><span className="text-red-500">{hoveredCell.errorCode}</span></>
+                  )}
+                  {hoveredCell.isLatched && (
+                    <><span className="text-slate-300">·</span><span className="text-red-700">latched</span></>
+                  )}
+                  {hoveredCell.corruptionDetected && (
+                    <><span className="text-slate-300">·</span><span className="text-amber-600">corrupt {hoveredCell.corruptionCrc}</span></>
+                  )}
+                  {hoveredCell.trueFaultSource && hoveredCell.coreResult === "fail" && (
+                    <><span className="text-slate-300">·</span><span className="text-amber-600 text-[10px]">⚠ upstream: {hoveredCell.trueFaultSource}</span></>
+                  )}
+                </div>
+              ) : (
+                <span className="text-[11px] text-slate-400 pl-1">Hover a cell for diagnostics</span>
+              )}
+            </div>
+
+            {/* Legend */}
+            <div className="flex items-center flex-wrap gap-x-5 gap-y-1 mt-3 pt-3 border-t border-slate-100 text-[11px] text-slate-500">
+              <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-green-500 inline-block" /> Pass</span>
+              <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-amber-400 inline-block" /> Testing</span>
+              <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-red-500 inline-block" /> Fail</span>
+              <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-red-700 inline-block" /> Latched (L)</span>
+              <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-amber-400 inline-block" /> Corrupted (~)</span>
+              {latestRun?.failure_mode && (
+                <span className="ml-auto text-amber-600 font-medium capitalize">{latestRun.failure_mode} mode</span>
+              )}
+            </div>
+          </div>
+
+          {/* Telemetry Chart */}
+          <div className="bg-white border border-slate-200 rounded-lg p-4">
+            <TelemetryChart runs={runs} queryInfo={queryInfo ?? undefined} />
+          </div>
+
+          {/* Recent Test Runs */}
+          <div id="test-run-history" className="bg-white border border-slate-200 rounded-lg p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <h2 className="text-sm font-semibold text-slate-700">Recent Test Runs</h2>
+              {queryInfo && (
+                <QueryTooltip queryInfo={queryInfo as Parameters<typeof QueryTooltip>[0]["queryInfo"]} label="query" />
+              )}
+            </div>
+            <div className="space-y-1">
+              {runs.slice(0, 10).map((run) => (
+                <div key={run.id}>
+                  <button
+                    onClick={() => setExpandedRun(expandedRun === run.id ? null : run.id)}
+                    className="w-full flex items-center gap-3 text-xs text-left hover:bg-slate-50 rounded px-2 py-1.5 transition-colors"
+                  >
+                    <LedIndicator state={run.led_state} size="sm" />
+                    <span className="text-slate-500 w-24 shrink-0">{fmtTime(run.started_at)}</span>
+                    <span className={`w-10 shrink-0 font-semibold ${run.status === "fail" ? "text-red-600" : "text-green-600"}`}>
+                      {run.status.toUpperCase()}
+                    </span>
+                    <span className="text-slate-400">{run.duration_ms} ms</span>
+                    {run.results?.components?.filter((c) => c.result === "fail").map((c) => (
+                      <span key={c.component_id} className="text-red-500 font-mono">{c.component_id}</span>
+                    ))}
+                    {run.failure_mode && (
+                      <span className="text-amber-500 text-[10px] capitalize">{run.failure_mode}</span>
+                    )}
+                    <span className="text-slate-400 ml-auto">{expandedRun === run.id ? "▾" : "▸"} JSON</span>
+                  </button>
+                  {expandedRun === run.id && (
+                    <pre className="text-xs text-slate-600 bg-slate-50 border border-slate-100 rounded p-3 mt-1 overflow-auto max-h-48">
+                      {JSON.stringify(run, null, 2)}
+                    </pre>
+                  )}
+                </div>
+              ))}
             </div>
           </div>
         </div>
-      </main>
-    </div>
+
+        {/* Right column */}
+        <div className="space-y-4">
+          {/* Device metadata */}
+          {device && (
+            <div className="bg-white border border-slate-200 rounded-lg p-4">
+              <h3 className="text-sm font-semibold text-slate-700 mb-3">Device Metadata</h3>
+              <div className="space-y-2.5 text-xs">
+                {Object.entries(device)
+                  .filter(([k]) => !["id", "embedding", "_id"].includes(k))
+                  .map(([k, v]) => (
+                    <div key={k} className="flex items-start justify-between gap-3">
+                      <span className="text-slate-500 font-mono shrink-0">{k}</span>
+                      {DATE_FIELDS.has(k) && typeof v === "string" ? (
+                        <span className="text-slate-700 text-right" title={String(v)}>{fmtDateTime(v)}</span>
+                      ) : (
+                        <MetaValue value={v} />
+                      )}
+                    </div>
+                  ))}
+              </div>
+            </div>
+          )}
+
+          {/* NVMe SMART Data */}
+          {latestRun?.nvme_smart && (
+            <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
+              <button
+                onClick={() => setSmartOpen((o) => !o)}
+                className="w-full flex items-center justify-between px-4 py-3 text-xs text-slate-600 hover:bg-slate-50 transition-colors"
+              >
+                <div className="flex items-center gap-2">
+                  <span className="font-medium">NVMe SMART Data</span>
+                  {latestRun.nvme_smart.media_errors > 0 && (
+                    <span className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 text-[10px] font-medium">
+                      {latestRun.nvme_smart.media_errors} media error{latestRun.nvme_smart.media_errors !== 1 ? "s" : ""}
+                    </span>
+                  )}
+                  {latestRun.nvme_smart.critical_warning > 0 && (
+                    <span className="px-1.5 py-0.5 rounded bg-red-100 text-red-700 text-[10px] font-medium">critical</span>
+                  )}
+                </div>
+                <span className="text-slate-400">{smartOpen ? "▾ hide" : "▸ show"}</span>
+              </button>
+              {smartOpen && (
+                <div className="border-t border-slate-100 p-4">
+                  <table className="w-full text-xs">
+                    <tbody className="divide-y divide-slate-50">
+                      {[
+                        ["Temperature", `${latestRun.nvme_smart.temperature}°C`],
+                        ["Media Errors", latestRun.nvme_smart.media_errors],
+                        ["Err Log Entries", latestRun.nvme_smart.num_err_log_entries],
+                        ["Power-on Hours", latestRun.nvme_smart.power_on_hours.toLocaleString()],
+                        ["Unsafe Shutdowns", latestRun.nvme_smart.unsafe_shutdowns],
+                        ["Available Spare", `${latestRun.nvme_smart.available_spare}%`],
+                        ["% Used", `${latestRun.nvme_smart.percentage_used}%`],
+                      ].map(([label, val]) => (
+                        <tr key={String(label)}>
+                          <td className="py-1.5 text-slate-500 font-mono">{label}</td>
+                          <td className="py-1.5 text-slate-700 text-right font-mono">{val}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {latestRun.nvme_errors && latestRun.nvme_errors.length > 0 && (
+                    <div className="mt-3 pt-3 border-t border-slate-100">
+                      <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide mb-2">Error Log</p>
+                      <div className="space-y-1">
+                        {latestRun.nvme_errors.map((e, i) => (
+                          <div key={i} className="text-[11px] text-slate-600 font-mono flex gap-2">
+                            <span className="text-slate-400">#{e.error_count}</span>
+                            <span>{e.description}</span>
+                            <span className="text-slate-400 ml-auto">0x{e.status_field.toString(16).padStart(2, "0")}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Raw document (progressive disclosure) */}
+          {latestRun && (
+            <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
+              <button
+                onClick={() => setRawDataOpen((o) => !o)}
+                className="w-full flex items-center justify-between px-4 py-3 text-xs text-slate-600 hover:bg-slate-50 transition-colors"
+              >
+                <span className="font-medium">Raw MongoDB Document</span>
+                <span className="text-slate-400">{rawDataOpen ? "▾ hide" : "▸ show"}</span>
+              </button>
+              {rawDataOpen && (
+                <div id="doc-viewer" className="border-t border-slate-100">
+                  <pre className="text-xs text-slate-600 bg-slate-50 p-4 overflow-auto max-h-96">
+                    {JSON.stringify(latestRun, null, 2)}
+                  </pre>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    </main>
   );
 }

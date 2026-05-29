@@ -16,6 +16,12 @@ from bson import ObjectId
 SYSTEM_PROMPT = """You are a root cause analyst for in-system hardware tests.
 Given an alert and retrieved similar past failures, determine the most likely root cause.
 
+When hardware telemetry context is provided:
+- Explain *why* the core temperature is elevated (thermal runaway vs high ambient vs sustained load).
+- When true_fault_source is present, reason about whether the visible failure is a downstream symptom of that upstream controller rather than a local component failure.
+- Reference NVMe SMART data when available — media_errors and num_err_log_entries indicate media degradation independent of loopback failures.
+- The failure_mode field describes the behavioral pattern (intermittent/sticky/silent); factor this into your hypothesis.
+
 Output valid JSON matching this schema:
 {{
   "root_cause_hypothesis": "string",
@@ -29,7 +35,7 @@ Output valid JSON matching this schema:
 Be conservative. Cite the retrieved incidents by ID. If multiple hypotheses are equally likely, list them."""
 
 
-async def run_root_cause(alert_id: str) -> tuple[RootCauseAnalysis, list, list]:
+async def run_root_cause(alert_id: str, telemetry_context: str | None = None) -> tuple[RootCauseAnalysis, list, list]:
     start_time = time.time()
     db = get_db()
     tool_calls_log = []
@@ -98,10 +104,13 @@ async def run_root_cause(alert_id: str) -> tuple[RootCauseAnalysis, list, list]:
     loc = device_info.get("location", {})
     location_str = ", ".join(f"{k}={v}" for k, v in loc.items()) if loc else "unknown"
 
+    telemetry_block = f"\n{telemetry_context}\n" if telemetry_context else ""
+
     human_text = (
         f"Alert: {description}\n"
         f"Device: {alert.get('device_id')} at {location_str}\n"
-        f"Failure rate: {alert.get('failure_rate', 0):.1%}\n\n"
+        f"Failure rate: {alert.get('failure_rate', 0):.1%}\n"
+        f"{telemetry_block}\n"
         f"Retrieved similar past failures:\n{similar_summaries or 'None found'}\n"
         f"{kb_context}\n"
         "Provide root cause analysis as JSON."

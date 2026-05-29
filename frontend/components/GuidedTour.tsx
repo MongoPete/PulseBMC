@@ -29,60 +29,68 @@ export function Pill({ children }: { children: React.ReactNode }) {
 const FLEET_STEPS: Step[] = [
   {
     target: "#device-grid",
-    title: "What is PulseBMC?",
+    title: "Step 1 — Fleet at a Glance",
     content: (
       <TourCard>
         <p>
-          A <strong>BMC</strong> (Baseboard Management Controller) is a tiny computer built into every server.
-          It monitors hardware health 24/7 — temperature, power, memory — even when the main OS is off.
+          Each chip represents a BMC device running a PCIe loopback test every 10 seconds.
+          The label shows its rack coordinates (<Pill>R1-S3</Pill> = Rack 1, Slot 3).
         </p>
         <p>
-          <strong>PulseBMC</strong> simulates a fleet of 20 BMCs running a <em>loopback test</em>:
-          a self-check that sends a signal through the PCIe card and expects it back within 400 ms.
-          Pass = green LED. Fail = red LED.
+          <strong>Chip colors:</strong> green = healthy · <span className="text-amber-500 font-medium">amber = test running</span> · <span className="text-red-600 font-medium">red = failure</span>
         </p>
-        <p className="text-gray-600 text-xs">Click any LED to drill into that device's history.</p>
+        <p>
+          Every result is a document written to MongoDB Atlas the instant the test completes —
+          no polling, no ETL. The grid updates in real time via Server-Sent Events.
+        </p>
+        <WhyBox>
+          A single <Pill>test_runs</Pill> document holds the overall result, each PCIe component,
+          and every CPU core — data that would need 3 SQL tables and 2 JOINs.
+        </WhyBox>
       </TourCard>
     ),
   },
   {
-    target: "#concept-bar",
-    title: "Where does the data live?",
+    target: "#device-grid",
+    title: "Step 2 — Inspect Without Leaving the Screen",
     content: (
       <TourCard>
         <p>
-          Every loopback result is a <strong>document</strong> written to MongoDB Atlas the instant
-          the test completes. Think of a document like a SQL row — but it can contain nested objects.
+          <strong>Click any chip</strong> to open the slide-over drawer — component health grid,
+          last 10 runs, NVMe SMART telemetry, and hardware location (datacenter › rack › slot).
         </p>
         <p>
-          A single <Pill>test_runs</Pill> document holds the overall result <em>and</em> each
-          component result inside it. In SQL you'd need 3 tables and 2 JOINs to read the same data.
+          From the drawer you can <em>Rerun</em> the test immediately or <em>Isolate</em>
+          the device to maintenance mode without navigating away.
+        </p>
+        <p>
+          <strong>Right-click</strong> any chip for the same actions as a context menu.
         </p>
         <WhyBox>
-          Embedded documents eliminate JOINs on the hot read path. Reading LED states for
-          20 devices every 3 seconds — that difference compounds fast.
+          Device metadata, test history, and SMART telemetry are all in the same Atlas cluster —
+          one query path, no cross-service joins required.
         </WhyBox>
       </TourCard>
     ),
   },
   {
     target: "#demo-controls",
-    title: "Step 1: Trigger a failure",
+    title: "Step 3 — Trigger a Failure Scenario",
     content: (
       <TourCard>
         <p>
-          Expand <strong>Demo Scenarios</strong> and click <em>"Burst Failure — Device 15"</em>.
-          This writes 5 consecutive failure documents directly to Atlas.
+          Expand <strong>Demo Scenarios</strong> (the toggle below the grid) and click
+          <em>"Burst Failure — Device 15"</em>. Five failure documents are written to Atlas in rapid succession.
         </p>
         <p>
-          MongoDB evaluates the 10% failure-rate threshold on every insert using a
-          compound-indexed <Pill>$group</Pill> aggregation. No separate rules engine or cron job.
+          MongoDB evaluates a 10% failure-rate threshold on every insert using a compound-indexed
+          <Pill>$group</Pill> aggregation — no cron job, no rules engine.
         </p>
         <p className="text-gray-600 text-xs">
-          Watch LED 15 turn red within a second. Then click <strong>Alerts</strong> in the nav.
+          Watch chip 15 turn red, then right-click it to rerun or isolate directly from the grid.
         </p>
         <WhyBox>
-          Threshold detection runs as a sub-millisecond indexed query at ingest speed.
+          Threshold detection runs as a sub-millisecond indexed aggregation at ingest speed.
         </WhyBox>
       </TourCard>
     ),
@@ -90,48 +98,24 @@ const FLEET_STEPS: Step[] = [
   {
     target: "#alerts-nav",
     placement: "bottom" as const,
-    title: "Step 2: Go to Alerts",
+    title: "Step 4 — AI Root Cause + Work Order",
     content: (
       <TourCard>
         <p>
-          Click <strong>Alerts</strong> in the navigation bar above.
+          Click <strong>Alerts</strong> in the nav. The alert is already there, auto-created by
+          the aggregation that runs on each insert.
         </p>
         <p>
-          After triggering the burst failure, an alert will already be there — automatically
-          created by the aggregation query that runs on each insert.
+          Hit <em>"Run AI Analysis"</em> to trigger the 3-stage agent chain:
+          failure prediction → root cause (grounded in temperature data + upstream fault context) → work order with physical location.
         </p>
         <p>
-          On the Alerts page, hit <em>"Run AI Analysis"</em> to see the three-stage AI agent
-          pipeline: failure prediction → root cause → work order.
-        </p>
-        <p className="text-gray-600 text-xs">
-          The Alerts page has its own guided tour button to walk you through the AI output.
-        </p>
-      </TourCard>
-    ),
-  },
-  {
-    target: "#explore-nav",
-    placement: "bottom" as const,
-    title: "Step 3: Go to Explorer",
-    content: (
-      <TourCard>
-        <p>
-          Click <strong>Explorer</strong> in the nav to ask plain-English questions about your fleet.
-        </p>
-        <p>
-          Try: <em>"Which device has the highest failure rate?"</em> or{" "}
-          <em>"What error codes appeared most in the last 24 hours?"</em>
-        </p>
-        <p>
-          Every answer shows you the MongoDB query and SQL equivalent side-by-side —
-          so you can see exactly how the database produced the result.
-        </p>
-        <p className="text-gray-600 text-xs">
-          The Explorer page also has its own guided tour.
+          The accordion on each alert reveals the full AI output — expand to see the root cause
+          hypothesis, confidence score, and technician work order referencing the rack location.
         </p>
         <WhyBox>
-          Same data model at the edge and in the cloud. One query language, one schema.
+          Atlas Vector Search retrieves semantically similar past failures. Voyage AI embeddings,
+          MongoDB retrieval — no Pinecone, no separate vector store.
         </WhyBox>
       </TourCard>
     ),
@@ -185,9 +169,9 @@ export default function GuidedTour({ steps = FLEET_STEPS, label = "Guided Tour",
       <button
         onClick={() => setRun(true)}
         id="start-tour"
-        className="flex items-center gap-2 text-sm border border-slate-600 text-slate-300 bg-slate-900 hover:bg-slate-800 px-3 py-1.5 rounded-lg transition-colors"
+        className="flex items-center gap-2 text-sm border border-slate-200 text-slate-600 bg-white hover:bg-slate-50 px-3 py-1.5 rounded-lg transition-colors"
       >
-        <span className="text-emerald-400">▶</span> {label}
+        <span style={{ color: "#009999" }}>▶</span> {label}
         <span className="text-slate-400 text-xs">{count} steps</span>
       </button>
     </>

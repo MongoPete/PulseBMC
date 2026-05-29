@@ -42,6 +42,65 @@ async def root_cause(req: RootCauseRequest):
     return rca.model_dump()
 
 
+def _build_telemetry_context(run: dict | None) -> str | None:
+    """Build a structured telemetry block from the latest failed test run."""
+    if not run:
+        return None
+
+    lines = ["=== Hardware Telemetry Context ==="]
+
+    failure_mode = run.get("failure_mode")
+    if failure_mode:
+        lines.append(f"failure_mode: {failure_mode}")
+
+    true_fault = run.get("true_fault_source")
+    if true_fault:
+        lines.append(f"true_fault_source (simulator hint): {true_fault}")
+
+    # Collect elevated core temps from failing components
+    components = run.get("results", {}).get("components", [])
+    for comp in components:
+        if comp.get("result") != "fail":
+            continue
+        core_temps = [
+            f"{cr['core_id']}={cr['temp_c']}°C"
+            for cr in comp.get("core_results", [])
+            if cr.get("temp_c") is not None
+        ]
+        if core_temps:
+            lines.append(f"core temperatures at failure ({comp['component_id']}): {', '.join(core_temps)}")
+
+    lines.append("healthy baseline expected: 38–62°C")
+
+    smart = run.get("nvme_smart")
+    if smart:
+        lines.append(
+            f"nvme_smart: media_errors={smart.get('media_errors', 0)}, "
+            f"num_err_log_entries={smart.get('num_err_log_entries', 0)}, "
+            f"temperature={smart.get('temperature', '?')}°C, "
+            f"critical_warning={smart.get('critical_warning', 0)}"
+        )
+
+    lines.append("=== End Context ===")
+    return "\n".join(lines)
+
+
+def _build_device_location(device_doc: dict | None) -> str | None:
+    """Build a human-readable location string from the device document."""
+    if not device_doc:
+        return None
+    loc = device_doc.get("location", {})
+    hw = device_doc.get("hardware", {})
+    parts = [
+        loc.get("datacenter"),
+        loc.get("rack"),
+        f"Slot-{loc.get('slot')}" if loc.get("slot") else None,
+    ]
+    location_str = " › ".join(p for p in parts if p)
+    model = hw.get("model", "")
+    return f"{location_str} ({model})" if model else location_str or None
+
+
 @router.post("/agents/chain")
 async def run_agent_chain(req: ChainRequest):
     """
@@ -82,12 +141,22 @@ async def run_agent_chain(req: ChainRequest):
     all_tool_calls = []
     all_retrieved_docs = []
 
+    # Fetch latest failed test run + device doc for telemetry context
+    latest_run = await db.test_runs.find_one(
+        {"device_id": device_id, "status": "fail"},
+        sort=[("started_at", -1)],
+    )
+    device_doc = await db.devices.find_one({"device_id": device_id})
+
+    telemetry_context = _build_telemetry_context(latest_run)
+    device_location = _build_device_location(device_doc)
+
     # Stage 1
     prediction, tc1 = await run_failure_prediction(device_id, req.time_window_hours)
     all_tool_calls.extend(tc1)
 
     # Stage 2
-    rca, tc2, similar_incidents = await run_root_cause(req.alert_id)
+    rca, tc2, similar_incidents = await run_root_cause(req.alert_id, telemetry_context=telemetry_context)
     all_tool_calls.extend(tc2)
     for s in similar_incidents:
         all_retrieved_docs.append(RetrievedDoc(
@@ -98,7 +167,7 @@ async def run_agent_chain(req: ChainRequest):
         ))
 
     # Stage 3
-    work_order = await run_work_order(rca, similar_incidents, device_id)
+    work_order = await run_work_order(rca, similar_incidents, device_id, device_location=device_location)
 
     duration_ms = int((time.time() - start) * 1000)
 

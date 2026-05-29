@@ -43,7 +43,13 @@ export const api = {
         burst_failure_devices: string[];
         trending_failure_devices: string[];
       }>,
+    rerun: (deviceId: string) =>
+      apiFetch(`/api/demo/rerun/${deviceId}`, { method: "POST" }),
+    setFailureMode: (deviceId: string, mode: string) =>
+      apiFetch(`/api/demo/set-failure-mode?device_id=${deviceId}&mode=${mode}`, { method: "POST" }),
   },
+  isolateDevice: (id: string, status: "online" | "offline" | "maintenance") =>
+    apiFetch(`/api/devices/${id}/status?status=${status}`, { method: "PATCH" }),
 };
 
 export const SSE_URL = `${API}/api/test-runs/stream`;

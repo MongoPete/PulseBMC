@@ -18,12 +18,12 @@ const STATIC_CARDS: ConceptCard[] = [
 ];
 
 export default function ConceptBar() {
-  const [visible, setVisible] = useState(true);
+  const [visible, setVisible] = useState(false);
   const [counts, setCounts] = useState<Record<string, number>>({});
 
   useEffect(() => {
     const stored = localStorage.getItem("conceptbar-visible");
-    if (stored === "false") setVisible(false);
+    if (stored === "true") setVisible(true);
 
     Promise.allSettled([
       api.devices(),
@@ -45,22 +45,24 @@ export default function ConceptBar() {
   };
 
   return (
-    <div className="border-b border-gray-800 bg-gray-950">
+    <div className="border-b bg-white" style={{ borderColor: "#e2e8f0" }}>
       <div className="max-w-7xl mx-auto px-4 py-1.5 flex items-center justify-between">
-        <button onClick={toggle} className="text-xs text-gray-400 hover:text-white transition-colors">
-          {visible ? "▾ MongoDB ↔ SQL concepts" : "▸ Show MongoDB ↔ SQL concepts"}
+        <button
+          onClick={toggle}
+          className="text-xs text-slate-400 hover:text-slate-700 transition-colors"
+        >
+          {visible ? "▾ MongoDB ↔ SQL concepts" : "▸ MongoDB ↔ SQL concepts"}
         </button>
         {visible && (
-          <div className="flex gap-4 flex-wrap">
+          <div className="flex gap-3 flex-wrap">
             {[
               { collection: "devices", count: counts.devices },
               { collection: "test_runs", count: counts.test_runs },
               { collection: "alerts", count: counts.alerts },
             ].map((c) => (
-              <span key={c.collection} className="text-xs text-gray-300 bg-gray-900 px-2 py-1 rounded border border-gray-700">
-                <span className="text-green-400 font-mono font-medium">{c.collection}</span>
-                {c.count !== undefined && <span className="text-gray-400 ml-1">· {c.count.toLocaleString()} docs</span>}
-                <span className="text-gray-400 ml-1">≈ SQL table</span>
+              <span key={c.collection} className="text-xs text-slate-600 bg-slate-50 px-2 py-0.5 rounded border border-slate-200">
+                <span className="font-mono font-medium" style={{ color: "#009999" }}>{c.collection}</span>
+                {c.count !== undefined && <span className="text-slate-400 ml-1">· {c.count.toLocaleString()}</span>}
               </span>
             ))}
           </div>
@@ -69,13 +71,16 @@ export default function ConceptBar() {
 
       {visible && (
         <div className="max-w-7xl mx-auto px-4 pb-2">
-          <div className="flex gap-3 flex-wrap">
+          <div className="flex gap-2 flex-wrap">
             {STATIC_CARDS.map((card) => (
-              <div key={card.mongoTerm} className="group relative text-xs bg-gray-900 border border-gray-700 rounded px-2.5 py-1.5 cursor-help">
-                <span className="text-yellow-300 font-mono font-medium">{card.mongoTerm}</span>
-                <span className="text-gray-400 mx-1">→</span>
-                <span className="text-blue-300 font-medium">{card.sqlEquivalent}</span>
-                <div className="absolute bottom-full left-0 mb-1 hidden group-hover:block z-50 w-56 bg-gray-800 border border-gray-500 rounded p-2 text-gray-200 shadow-xl text-xs leading-relaxed">
+              <div
+                key={card.mongoTerm}
+                className="group relative text-xs bg-slate-50 border border-slate-200 rounded px-2.5 py-1 cursor-help"
+              >
+                <span className="font-mono font-medium text-slate-700">{card.mongoTerm}</span>
+                <span className="text-slate-400 mx-1">→</span>
+                <span className="font-medium text-blue-600">{card.sqlEquivalent}</span>
+                <div className="absolute bottom-full left-0 mb-1 hidden group-hover:block z-50 w-56 bg-white border border-slate-200 rounded p-2 text-slate-700 shadow-lg text-xs leading-relaxed">
                   {card.detail}
                 </div>
               </div>

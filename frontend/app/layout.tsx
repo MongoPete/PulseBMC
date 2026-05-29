@@ -8,34 +8,91 @@ export const metadata: Metadata = {
   description: "BMC fleet health monitoring powered by MongoDB Atlas",
 };
 
+function SiemensLogo() {
+  return (
+    <span
+      style={{
+        fontFamily: "Arial, sans-serif",
+        fontWeight: 700,
+        letterSpacing: "0.18em",
+        fontSize: "12px",
+        color: "#009999",
+        textTransform: "uppercase",
+      }}
+    >
+      SIEMENS
+    </span>
+  );
+}
+
+function MongoDBBadge() {
+  return (
+    <span className="flex items-center gap-1 text-xs text-slate-500">
+      <span style={{ color: "#00ED64", fontSize: "10px" }}>●</span>
+      <span>MongoDB Atlas</span>
+    </span>
+  );
+}
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className="dark">
-      <body className="bg-gray-950 text-gray-100 min-h-screen">
-        <nav className="border-b border-gray-800 bg-gray-950 sticky top-0 z-40">
+    <html lang="en">
+      <body className="min-h-screen" style={{ background: "#F4F7F9", color: "#1B1B1B" }}>
+        <nav
+          className="sticky top-0 z-40 border-b"
+          style={{ background: "#ffffff", borderColor: "#e2e8f0" }}
+        >
           <div className="max-w-7xl mx-auto px-4 h-12 flex items-center justify-between">
             <div className="flex items-center gap-6">
-              <Link href="/" className="font-bold text-white tracking-tight">
-                <span className="text-green-400">Pulse</span>BMC
-              </Link>
+              {/* Brand lockup */}
+              <div className="flex items-center gap-3">
+                <SiemensLogo />
+                <span className="text-slate-300 text-sm">×</span>
+                <Link href="/" className="font-bold tracking-tight text-slate-800 text-sm">
+                  Pulse<span style={{ color: "#009999" }}>BMC</span>
+                </Link>
+              </div>
               <div className="flex items-center gap-4 text-sm">
-                <Link id="fleet-nav" href="/" className="text-gray-400 hover:text-white transition-colors">Fleet</Link>
-                <Link id="alerts-nav" href="/alerts" className="text-gray-400 hover:text-white transition-colors">Alerts</Link>
-                <Link id="explore-nav" href="/explore" className="text-gray-400 hover:text-white transition-colors">Explorer</Link>
-                <Link href="/architecture" className="text-gray-400 hover:text-white transition-colors flex items-center gap-1">
-                  <span className="text-emerald-400 text-[10px]">◈</span> How It Works
+                <Link id="fleet-nav" href="/" className="text-slate-500 hover:text-slate-900 transition-colors">
+                  Fleet
+                </Link>
+                <Link id="alerts-nav" href="/alerts" className="text-slate-500 hover:text-slate-900 transition-colors">
+                  Alerts
+                </Link>
+                <Link id="explore-nav" href="/explore" className="text-slate-500 hover:text-slate-900 transition-colors">
+                  Explorer
+                </Link>
+                <Link href="/architecture" className="text-slate-500 hover:text-slate-900 transition-colors flex items-center gap-1">
+                  <span style={{ color: "#009999" }} className="text-[10px]">◈</span> How It Works
                 </Link>
               </div>
             </div>
             <div className="flex items-center gap-4">
               <LiveClock />
-              <div id="atlas-badge" className="text-xs text-gray-500 border border-gray-700 rounded px-2 py-1">
-                <span className="text-green-400">●</span> Atlas: back-to-basics-crud
+              <MongoDBBadge />
+              <div
+                id="atlas-badge"
+                className="text-xs text-slate-500 border rounded px-2 py-1"
+                style={{ borderColor: "#e2e8f0" }}
+              >
+                <span style={{ color: "#009999" }}>●</span> Atlas: back-to-basics-crud
               </div>
             </div>
           </div>
         </nav>
         {children}
+        {/* Footer branding */}
+        <footer className="mt-12 border-t py-4" style={{ borderColor: "#e2e8f0" }}>
+          <div className="max-w-7xl mx-auto px-4 flex items-center justify-between text-xs text-slate-400">
+            <div className="flex items-center gap-3">
+              <SiemensLogo />
+              <span>×</span>
+              <span style={{ color: "#00ED64" }}>●</span>
+              <span>MongoDB Atlas</span>
+            </div>
+            <span>BMC Fleet Health Monitoring POC</span>
+          </div>
+        </footer>
       </body>
     </html>
   );

@@ -193,47 +193,47 @@ Opens:
 
 ### Scenario 1 — Happy path (2 min)
 > "Here's a fleet of 20 BMC devices running loopback health tests every 10 seconds."
-1. Open http://localhost:3000 — show 20 green LEDs
-2. Point at the ConceptBar: "Each LED is a document in the `test_runs` collection — like a SQL table with embedded component data"
-3. Click the **Start Demo Tour** button for a guided walkthrough
+1. Open http://localhost:3000 — show 20 green chips with rack coordinates
+2. Click the **Guided Tour** button for a 4-step operational walkthrough
+3. Point out amber chips flashing as tests run, then returning to green
 
-### Scenario 2 — Single failure (1 min)
+### Scenario 2 — Inspect a device (1 min)
+> "Click any chip to inspect without leaving the fleet view."
+1. Click any green chip — the slide-over drawer opens on the right
+2. Show: component health grid, last 10 run history, NVMe SMART telemetry, rack location
+3. Right-click any chip to show the context menu (Rerun, View History, Isolate)
+
+### Scenario 3 — Trigger a failure (1 min)
 > "Watch what happens when a device fails."
-1. In **Demo Controls**, click **Trigger Burst Failure — Device 15**
-2. LED 15 goes red in ~3s
-3. Navigate to `/alerts` — the alert appears automatically
+1. Scroll to **Demo Controls** (expand the toggle at the bottom of the page)
+2. Click **Trigger Burst Failure — Device 15**
+3. Chip 15 turns red in ~3s; right-click it → Rerun to trigger a manual recheck
 
-### Scenario 3 — Trending failure (2 min)
-> "MongoDB evaluates threshold rules on every insert."
+### Scenario 4 — Trending failure + alert (2 min)
+> "MongoDB evaluates threshold rules on every insert — no cron job."
 1. Click **Trigger Trending Failure — Device 7**
 2. Watch the failure rate climb → alert fires when it crosses 10%
-3. Show the `QueryTooltip` on the alerts table — it shows the `$group` aggregation + SQL equivalent
+3. Navigate to `/alerts` — the alert is already there, auto-created by the `$group` aggregation
 
-### Scenario 4 — Full AI agent chain (3 min)
-> "Three stages: predict → diagnose → work order."
+### Scenario 5 — Full AI agent chain (3 min)
+> "Three stages: predict → root cause grounded in real telemetry → physical work order."
 1. On the alerts page, click **Run AI Analysis** on the Device 7 alert
 2. Watch the three-stage chain run (~15-30s)
-3. Show the `RootCauseCard` with confidence meter
-4. Show the `WorkOrderCard` with historical basis
+3. Expand the accordion: show `RootCauseCard` — note temperature + upstream fault context in the analysis
+4. Show `WorkOrderCard` — repair steps reference the physical rack location (datacenter › rack › slot)
 
-### Scenario 5 — RAG money shot (2 min)
+### Scenario 6 — RAG money shot (2 min)
 > "The AI found these failures in Atlas Vector Search — semantically similar even with different error codes."
 1. After the agent chain runs, open the **Atlas Vector Search retrieved N similar past failures** panel
 2. Show the similarity scores (>0.90 for the pre-seeded PCIe failures)
 3. "Voyage AI embeddings, MongoDB Atlas Vector Search, all in one cluster — no Pinecone, no ETL"
-
-### Scenario 6 — Offline buffer (1 min)
-> "BMCs can't always reach the network."
-1. Click **Simulate Offline Buffer (30s)**
-2. In another terminal: `python simulator/emit_tests.py --offline-buffer-sim`
-3. Show writes being held, then the burst flush — all LEDs update at once
 
 ### Scenario 7 — Explorer (open-ended)
 > "Now you drive. Ask anything about the fleet data."
 1. Navigate to `/explore`
 2. Click the starter chip: "Which device has the highest failure rate?"
 3. Show the result table + the MongoDB pipeline + SQL equivalent below it
-4. Let Aaron type his own question
+4. Try: "Show me devices with media errors in their NVMe SMART data"
 
 ---
 

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from app.db import get_db
 from app.models.device import Device, DeviceCreate
 from app.models.common import QueryInfo, PaginatedResponse
@@ -34,6 +34,19 @@ async def get_device(device_id: str):
     if not doc:
         raise HTTPException(status_code=404, detail="Device not found")
     return _serialize(doc)
+
+
+@router.patch("/devices/{device_id}/status")
+async def update_device_status(device_id: str, status: str = Query(..., pattern="^(online|offline|maintenance)$")):
+    """Set device status — used by isolate/restore actions in the control plane."""
+    db = get_db()
+    result = await db.devices.update_one(
+        {"device_id": device_id},
+        {"$set": {"status": status}},
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Device not found")
+    return {"device_id": device_id, "status": status}
 
 
 @router.post("/devices", status_code=201)
