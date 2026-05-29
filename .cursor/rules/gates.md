@@ -2,20 +2,22 @@
 
 ## Project
 
-- **Project name:** Personal Finance Transaction Tracker (SCoRe)
-- **Customer/account:** Internal / reference POC
-- **Owner:** Peter
-- **Last updated:** 2026-05-16
+- **Project name:** <!-- [Project Name] POC -->
+- **Customer/account:** <!-- Internal / reference POC / Customer name -->
+- **Owner:** <!-- Name -->
+- **Last updated:** <!-- YYYY-MM-DD -->
 
 ## Gate Entries
 
 | Gate ID | Gate Name | What was presented | Approval phrase (exact) | Approved by | Date | Evidence links |
 |---------|-----------|-------------------|-------------------------|-------------|------|----------------|
-| G0 | Requirements & Plan | Attached build plan — Atlas breadth, single demo user | Plan approved — implement as specified | User | 2026-05-16 | `.cursor/plans/finance_tracker_poc_0d9016cf.plan.md` |
-| G1 | Data Model Review | `docs/schema-review.md` | Plan approved — implement as specified | User | 2026-05-16 | `docs/schema-review.md` |
-| G2 | Architecture & Technology Selection | `docs/architecture.md` | Plan approved — implement as specified | User | 2026-05-16 | `docs/architecture.md` |
-| G3 | Build Plan | `docs/build-plan.md` | Plan approved — implement as specified | User | 2026-05-16 | `docs/build-plan.md` |
+| G0 | Requirements & Plan | Build plan — MongoDB capabilities, scope, audience | Plan approved — implement as specified | | | `build-plan.md` |
+| G1 | Data Model Review | Schema review — collections, indexes, embedding fields | Plan approved — implement as specified | | | `schema-review.md` |
+| G2 | Architecture & Technology Selection | Architecture — component map, stack decisions | Plan approved — implement as specified | | | `architecture.md` |
+| G3 | Build Plan | Phase plan with risks and mitigations | Plan approved — implement as specified | | | `build-plan.md` |
 
 ## Notes
 
-- Build phases G4-Pn logged in `docs/phase-status.md` as implementation completes.
+- Build phase gates (G4+) logged in `phase-status.md` as implementation completes.
+- Approval phrase must be exact: **"Plan approved — implement as specified"**
+- Do not proceed to implementation of any phase without the corresponding gate entry logged here.

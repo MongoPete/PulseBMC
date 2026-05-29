@@ -1,33 +1,35 @@
-# Phase Status — Personal Finance Transaction Tracker
+# Phase Status — [Project Name]
 
 ## Overall Status
 
-- **Current phase:** Complete (pending Atlas connection for runtime smoke)
-- **Overall state:** Complete
-- **Last updated:** 2026-05-16
+- **Current phase:** Phase 0
+- **Overall state:** Not started
+- **Last updated:** <!-- YYYY-MM-DD -->
 
 ## Phase Tracker
 
 | Phase | Scope | Prerequisites met | Implementation status | Test commands | Test result | Gate approval logged |
 |-------|-------|-------------------|----------------------|---------------|-------------|---------------------|
-| Phase 0 (Kickoff) | Requirements, model, architecture, plans | Yes | Complete | — | — | Yes |
-| Phase 1 | Scaffold + connectivity | Yes | Complete | `npm run smoke:connectivity` | Requires `.env` | — |
-| Phase 2 | Seed + CRUD | Yes | Complete | `npm run seed` | Requires `.env` | — |
-| Phase 3 | Aggregations dashboard | Yes | Complete | `npm run smoke:analytics` | Requires seed | — |
-| Phase 4 | Atlas Search | Yes | Complete | `npm run smoke:search` | Requires index READY | — |
-| Phase 5 | Change Streams | Yes | Complete | `npm run smoke:e2e` | Requires `.env` | — |
-| Phase 6 | Polish + handoff | Yes | Complete | Manual dry-run | Pending user Atlas | — |
+| Phase 0 (Kickoff) | Requirements, model, architecture, plans | — | Pending | — | — | — |
+| Phase 1 | Scaffold + connectivity | — | Pending | `npm run smoke:connectivity` | — | — |
+| Phase 2 | Seed + CRUD | — | Pending | `npm run seed` | — | — |
+| Phase 3 | Atlas Search | — | Pending | `npm run smoke:search` | — | — |
+| Phase 4 | Vector Search + embeddings | — | Pending | `npm run smoke:vector` | — | — |
+| Phase 5 | Agents | — | Pending | `npm run smoke:agents` | — | — |
+| Phase 6 | Polish + handoff | — | Pending | Manual dry-run | — | — |
 
 ## Delivered Artifacts
 
-- `lib/` — MongoDB client, types, analytics, demo user helper
-- `scripts/` — seed, search index, smoke tests
-- `frontend/` — Next.js 5-tab demo UI + API routes
+<!-- Fill in as phases complete -->
+- `backend/` — Express 5 API (routes, MongoDB client, types)
+- `frontend/` — React + Vite + Tailwind SPA (Setup, Search, Agents pages)
+- `scripts/` — seed, ensure-search-index, ensure-vector-index, smoke tests
 - `README.md`, `docs/runbook.md`
 
-## Next step (operator)
+## Next Step (Operator)
 
-1. Copy `.env.example` → `.env` and set `MONGODB_URI`
-2. `npm run seed` → set `DEMO_USER_ID`
-3. `npm run search:index` → wait for READY
-4. `npm run dev`
+1. Copy `.env.example` → `.env` and set `MONGODB_URI` and embedding provider key
+2. `npm run seed` — loads collections and generates embeddings
+3. `npm run ensure-search-index` — wait for READY
+4. `npm run ensure-vector-index` — wait for READY
+5. `npm run dev`
