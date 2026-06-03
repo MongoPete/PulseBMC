@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from app.db import ensure_indexes, close_client
-from app.routes import devices, test_runs, alerts, agents, demo, explore
+from app.routes import devices, test_runs, alerts, agents, demo, explore, telemetry
 from app.services import sim_control
 
 
@@ -36,6 +36,7 @@ app.include_router(alerts.router, prefix="/api")
 app.include_router(agents.router, prefix="/api")
 app.include_router(demo.router, prefix="/api")
 app.include_router(explore.router, prefix="/api")
+app.include_router(telemetry.router, prefix="/api")
 
 
 @app.get("/health")

@@ -1,13 +1,17 @@
 "use client";
-import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import LedIndicator from "@/components/LedIndicator";
 import type { LedState } from "@/components/LedIndicator";
 import TelemetryChart from "@/components/TelemetryChart";
+import ThermalTrendChart from "@/components/ThermalTrendChart";
 import QueryTooltip from "@/components/QueryTooltip";
+import RuntimeDebugPanel from "@/components/RuntimeDebugPanel";
 import { api, SSE_URL } from "@/lib/api";
-import { fmtTime, fmtDateTime } from "@/lib/time";
+import { fmtTime, fmtDateTime, fmtRelative } from "@/lib/time";
+import { JsonLight } from "@/components/SyntaxHighlight";
+import { trackedEventSource, trackedInterval, trackedTimeout } from "@/lib/runtimeDebug";
 
 const DATE_FIELDS = new Set(["last_seen", "registered_at", "created_at", "updated_at", "started_at", "completed_at"]);
 
@@ -27,6 +31,14 @@ interface ComponentResult {
   core_results?: CoreResult[];
 }
 
+interface LatchedFailure {
+  component_id: string;
+  core_id: string;
+  error_code?: string;
+  run_id?: string;
+  latched_at: string;
+}
+
 interface HoveredCell {
   componentId: string;
   compResult: string;
@@ -39,8 +51,13 @@ interface HoveredCell {
   temp?: number;
   latencyMs?: number;
   isLatched: boolean;
+  isLatchedPass: boolean;
+  latchInfo?: LatchedFailure;
   failureMode?: string;
   trueFaultSource?: string;
+  runId?: string;
+  runStartedAt?: string;
+  runDurationMs?: number;
 }
 
 interface TestRun {
@@ -91,15 +108,45 @@ function MetaValue({ value }: { value: unknown }) {
 
 export default function DevicePage() {
   const { id } = useParams<{ id: string }>();
+  const router = useRouter();
+  const [rerunning, setRerunning] = useState(false);
+  const [latching, setLatching] = useState(false);
   const [device, setDevice] = useState<Record<string, unknown> | null>(null);
   const [runs, setRuns] = useState<TestRun[]>([]);
   const [queryInfo, setQueryInfo] = useState<Record<string, unknown> | null>(null);
+  const [thermalReadings, setThermalReadings] = useState<Array<{ ts: string; readings: Record<string, unknown> }>>([]);
+  const [thermalQueryInfo, setThermalQueryInfo] = useState<Record<string, unknown> | null>(null);
   const [ledState, setLedState] = useState<LedState>("green");
   const [sseConnected, setSseConnected] = useState(false);
   const [expandedRun, setExpandedRun] = useState<string | null>(null);
   const [rawDataOpen, setRawDataOpen] = useState(false);
   const [smartOpen, setSmartOpen] = useState(false);
-  const [hoveredCell, setHoveredCell] = useState<HoveredCell | null>(null);
+  const [selectedCell, setSelectedCell] = useState<HoveredCell | null>(null);
+  const [sweepIdx, setSweepIdx] = useState(0);
+  const sweepRef = useRef<(() => void) | null>(null);
+  const rerunResetTimerRef = useRef<(() => void) | null>(null);
+  const runRefreshInFlightRef = useRef(false);
+
+  useEffect(() => {
+    return () => {
+      if (rerunResetTimerRef.current) rerunResetTimerRef.current();
+    };
+  }, []);
+
+  const refreshRunAndTelemetry = useCallback(async () => {
+    if (runRefreshInFlightRef.current) return;
+    runRefreshInFlightRef.current = true;
+    try {
+      const [runsRes, telemetryRes] = await Promise.all([
+        api.testRuns(id as string, 60),
+        api.telemetry(id as string, 60),
+      ]);
+      setRuns(runsRes.data ?? []);
+      setThermalReadings(telemetryRes.data ?? []);
+    } finally {
+      runRefreshInFlightRef.current = false;
+    }
+  }, [id]);
 
   useEffect(() => {
     api.device(id as string).then(setDevice).catch(() => {});
@@ -109,28 +156,65 @@ export default function DevicePage() {
       const latest = res.data?.[0];
       if (latest?.led_state) setLedState(latest.led_state);
     });
+    api.telemetry(id as string, 60).then((res) => {
+      setThermalReadings(res.data ?? []);
+      setThermalQueryInfo(res.query_info ?? null);
+    }).catch(() => {});
   }, [id]);
 
   useEffect(() => {
-    const es = new EventSource(SSE_URL);
+    const { es, close } = trackedEventSource(SSE_URL);
     es.onopen = () => setSseConnected(true);
     es.onmessage = (e) => {
       const payload = JSON.parse(e.data);
       if (payload.device_id === id && payload.led_state) {
         setLedState(payload.led_state);
-        api.testRuns(id as string, 60).then((res) => setRuns(res.data ?? []));
+        refreshRunAndTelemetry().catch(() => {});
       }
     };
     es.onerror = () => setSseConnected(false);
-    return () => es.close();
-  }, [id]);
+    return () => close();
+  }, [id, refreshRunAndTelemetry]);
+
+  // Single-core sweep: one cell at a time pulses amber while testing
+  useEffect(() => {
+    if (ledState === "amber") {
+      if (sweepRef.current) sweepRef.current();
+      const i = trackedInterval(() => setSweepIdx((n) => n + 1), 420);
+      sweepRef.current = i.clear;
+    } else {
+      if (sweepRef.current) sweepRef.current();
+      setSweepIdx(0);
+    }
+    return () => { if (sweepRef.current) sweepRef.current(); };
+  }, [ledState]);
 
   const latestRun = runs[0];
   const components = latestRun?.results?.components ?? [];
   const failingComponents = components.filter((c) => c.result === "fail");
   const location = device?.location as { datacenter?: string; rack?: string; slot?: string } | undefined;
+  const hw = device?.hardware as { model?: string; pcie_slots?: number } | undefined;
 
   const isSticky = latestRun?.failure_mode === "sticky";
+  const latchedFailures: LatchedFailure[] = (device?.latched_failures as LatchedFailure[] | undefined) ?? [];
+
+  // Pre-compute which [compIdx, coreIdx] is the active sweep cell
+  const sweepCell = useMemo(() => {
+    if (ledState !== "amber" || components.length === 0) return null;
+    const passCells: [number, number][] = [];
+    components.forEach((comp, ci) => {
+      const compFailed = comp.result === "fail";
+      const cores: CoreResult[] = comp.core_results?.length
+        ? comp.core_results
+        : Array.from({ length: 4 }, (_, i) => ({ core_id: `core_${i}`, result: compFailed ? "fail" : "pass" }));
+      cores.forEach((core, ki) => {
+        const isCorrupted = core.result !== "fail" && comp.corruption_detected && ki === 0;
+        if (core.result !== "fail" && !isCorrupted) passCells.push([ci, ki]);
+      });
+    });
+    if (passCells.length === 0) return null;
+    return passCells[sweepIdx % passCells.length];
+  }, [ledState, sweepIdx, components]);
 
   return (
     <main className="max-w-7xl mx-auto px-4 py-6">
@@ -143,22 +227,24 @@ export default function DevicePage() {
 
       {/* Header */}
       <div className="flex items-start justify-between mb-6 flex-wrap gap-4">
-        <div className="flex items-center gap-4">
-          <LedIndicator state={ledState} size="lg" />
+        <div className="flex items-start gap-3">
+          <div className="mt-1">
+            <LedIndicator state={ledState} size="md" />
+          </div>
           <div>
-            <h1 className="text-xl font-bold text-slate-800">{id}</h1>
-            {device && (
-              <>
-                <p className="text-sm text-slate-500">
-                  {(device.hostname as string) ?? ""}
-                  {location && (
-                    <span className="font-mono ml-2 text-slate-400">
-                      {[location.datacenter, location.rack, location.slot].filter(Boolean).join(" · ")}
-                    </span>
-                  )}
-                </p>
-              </>
-            )}
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <h1 className="text-lg font-semibold text-slate-800">{id}</h1>
+              {device && <span className="text-sm text-slate-400">{(device.hostname as string) ?? ""}</span>}
+            </div>
+            <div className="flex items-center gap-3 mt-0.5 text-xs text-slate-400 font-mono flex-wrap">
+              {location && (
+                <span>{[location.datacenter, location.rack, location.slot ? `Slot ${location.slot}` : null].filter(Boolean).join(" · ")}</span>
+              )}
+              {hw?.model && <span className="text-slate-300">·</span>}
+              {hw?.model && <span>{hw.model}</span>}
+              {hw?.pcie_slots && <span className="text-slate-300">·</span>}
+              {hw?.pcie_slots && <span>{hw.pcie_slots} PCIe slots</span>}
+            </div>
           </div>
         </div>
         <div id="sse-badge" className="flex items-center gap-2 text-xs">
@@ -182,7 +268,11 @@ export default function DevicePage() {
             <div className="flex items-start justify-between mb-4">
               <div>
                 <h2 className="text-sm font-semibold text-slate-700">Core Health Grid</h2>
-                <p className="text-[11px] text-slate-400 mt-0.5">row = PCIe component · cell = CPU core</p>
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  {components.length > 0
+                    ? `${components.length} PCIe component${components.length !== 1 ? "s" : ""} · ${components.reduce((n, c) => n + (c.core_results?.length ?? 4), 0)} cores · click a cell to inspect`
+                    : "row = PCIe component · cell = CPU core"}
+                </p>
               </div>
               {latestRun?.true_fault_source && (
                 <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-amber-50 border border-amber-200 rounded text-[11px] text-amber-700 max-w-[220px]">
@@ -209,7 +299,7 @@ export default function DevicePage() {
               <p className="text-xs text-slate-400 py-4 text-center">No test run data yet</p>
             ) : (
               <div className="space-y-4">
-                {components.map((comp, rowIdx) => {
+                {components.map((comp, compIdx) => {
                   const compFailed = comp.result === "fail";
                   const cores: CoreResult[] = comp.core_results?.length
                     ? comp.core_results
@@ -229,7 +319,7 @@ export default function DevicePage() {
                         )}
                         {comp.corruption_detected && (
                           <span className="text-[10px] text-amber-600 font-mono bg-amber-50 px-1.5 py-0.5 rounded">
-                            CORRUPT {comp.corruption_crc}
+                            corrupt {comp.corruption_crc}
                           </span>
                         )}
                       </div>
@@ -239,23 +329,34 @@ export default function DevicePage() {
                           const coreFailed = core.result === "fail";
                           const isLatched = coreFailed && isSticky;
                           const isCorrupted = !coreFailed && comp.corruption_detected && coreIdx === 0;
-                          const isScanning = ledState === "amber" && !coreFailed && !isCorrupted;
-                          const delay = `${(rowIdx * cores.length + coreIdx) * 110}ms`;
+                          const isSweeping = sweepCell !== null && sweepCell[0] === compIdx && sweepCell[1] === coreIdx;
 
-                          // Container background
-                          let containerCls = "bg-slate-50 border-slate-200";
-                          if (isLatched) containerCls = "bg-red-100 border-red-300";
-                          else if (coreFailed) containerCls = "bg-red-50 border-red-200";
-                          else if (isCorrupted) containerCls = "bg-amber-50 border-amber-200";
+                          // Check if this cell has an uncleared manual latch from the device doc
+                          const latchInfo = latchedFailures.find(
+                            (l) => l.component_id === comp.component_id && l.core_id === core.core_id
+                          );
+                          // latched-pass: has a latch but current test passed — the "almost missed it" state
+                          const isLatchedPass = !!latchInfo && !coreFailed;
 
-                          // Status dot color
+                          let containerCls = "bg-slate-50 border-slate-200 hover:border-slate-300";
+                          if (isLatched) containerCls = "bg-red-50 border-red-200 border-l-[3px] border-l-red-700 hover:bg-red-100";
+                          else if (coreFailed) containerCls = "bg-red-50 border-red-200 hover:bg-red-100";
+                          else if (isLatchedPass) containerCls = "bg-amber-50 border-amber-300 hover:bg-amber-100";
+                          else if (isCorrupted) containerCls = "bg-amber-50 border-amber-200 hover:bg-amber-100";
+                          else if (isSweeping) containerCls = "bg-amber-50 border-amber-300";
+
                           let dotCls = "bg-green-500";
-                          if (isScanning) dotCls = "bg-amber-400";
-                          else if (isLatched) dotCls = "bg-red-700";
+                          if (isSweeping) dotCls = "bg-amber-400 amber-blink";
+                          else if (isLatched) dotCls = "bg-red-800";
                           else if (coreFailed) dotCls = "bg-red-500";
+                          else if (isLatchedPass) dotCls = "bg-green-500";  // passing now
                           else if (isCorrupted) dotCls = "bg-amber-400";
 
-                          const hovered: HoveredCell = {
+                          const isSelected =
+                            selectedCell?.componentId === comp.component_id &&
+                            selectedCell?.coreIndex === coreIdx;
+
+                          const cellData: HoveredCell = {
                             componentId: comp.component_id,
                             compResult: comp.result,
                             errorCode: comp.error_code,
@@ -267,27 +368,31 @@ export default function DevicePage() {
                             temp: core.temp_c,
                             latencyMs: core.latency_ms,
                             isLatched,
+                            isLatchedPass,
+                            latchInfo,
                             failureMode: latestRun?.failure_mode,
                             trueFaultSource: latestRun?.true_fault_source,
+                            runId: latestRun?.id,
+                            runStartedAt: latestRun?.started_at,
+                            runDurationMs: latestRun?.duration_ms,
                           };
 
                           return (
                             <div
                               key={core.core_id}
-                              className={`relative w-11 h-11 rounded border cursor-default flex flex-col items-center justify-center gap-0.5 transition-colors ${containerCls}`}
-                              onMouseEnter={() => setHoveredCell(hovered)}
-                              onMouseLeave={() => setHoveredCell(null)}
+                              className={`relative w-11 h-11 rounded border cursor-pointer flex flex-col items-center justify-center gap-0.5 transition-colors ${containerCls} ${isSelected ? "ring-2 ring-offset-1 ring-slate-400" : ""}`}
+                              onClick={() => setSelectedCell(isSelected ? null : cellData)}
                             >
-                              <div
-                                className={`w-3 h-3 rounded-full ${dotCls} ${isScanning ? "animate-pulse" : ""}`}
-                                style={isScanning ? { animationDelay: delay } : undefined}
-                              />
+                              <div className={`w-3 h-3 rounded-full ${dotCls}`} />
                               <span className="text-[9px] text-slate-400 leading-none font-mono">{coreIdx}</span>
                               {isLatched && (
-                                <span className="absolute top-0.5 right-1 text-[8px] text-red-700 font-bold leading-none">L</span>
+                                <span className="absolute top-0.5 right-0.5 text-[7px] text-red-800 font-bold leading-none">L</span>
                               )}
-                              {isCorrupted && (
-                                <span className="absolute top-0.5 right-1 text-[8px] text-amber-600 font-bold leading-none">~</span>
+                              {isLatchedPass && (
+                                <span className="absolute top-0.5 right-0.5 text-[7px] text-amber-600 font-bold leading-none">⚑</span>
+                              )}
+                              {isCorrupted && !isLatchedPass && (
+                                <span className="absolute top-0.5 right-0.5 text-[7px] text-amber-600 font-bold leading-none">~</span>
                               )}
                             </div>
                           );
@@ -299,53 +404,190 @@ export default function DevicePage() {
               </div>
             )}
 
-            {/* Hover diagnostics strip */}
-            <div className="mt-4 min-h-[28px] flex items-center">
-              {hoveredCell ? (
-                <div className="px-3 py-1.5 bg-slate-100 rounded text-[11px] font-mono flex flex-wrap gap-x-3 gap-y-0.5 text-slate-600 w-full">
-                  <span className="text-slate-500">{hoveredCell.componentId}</span>
-                  <span className="text-slate-300">·</span>
-                  <span>{hoveredCell.coreId}</span>
-                  <span className="text-slate-300">·</span>
-                  <span className={hoveredCell.coreResult === "fail" ? "text-red-600 font-semibold" : "text-green-600"}>
-                    {hoveredCell.coreResult.toUpperCase()}
-                  </span>
-                  {hoveredCell.temp != null && (
-                    <><span className="text-slate-300">·</span><span>{hoveredCell.temp}°C</span></>
-                  )}
-                  {hoveredCell.latencyMs != null && (
-                    <><span className="text-slate-300">·</span><span>{hoveredCell.latencyMs}ms</span></>
-                  )}
-                  {hoveredCell.errorCode && hoveredCell.coreResult === "fail" && (
-                    <><span className="text-slate-300">·</span><span className="text-red-500">{hoveredCell.errorCode}</span></>
-                  )}
-                  {hoveredCell.isLatched && (
-                    <><span className="text-slate-300">·</span><span className="text-red-700">latched</span></>
-                  )}
-                  {hoveredCell.corruptionDetected && (
-                    <><span className="text-slate-300">·</span><span className="text-amber-600">corrupt {hoveredCell.corruptionCrc}</span></>
-                  )}
-                  {hoveredCell.trueFaultSource && hoveredCell.coreResult === "fail" && (
-                    <><span className="text-slate-300">·</span><span className="text-amber-600 text-[10px]">⚠ upstream: {hoveredCell.trueFaultSource}</span></>
-                  )}
+            {/* Selected cell inspection panel */}
+            <div className="mt-4 border-t border-slate-100 pt-3">
+              {selectedCell ? (
+                <div className="rounded border border-slate-200 bg-slate-50 p-3">
+                  <div className="flex items-start justify-between gap-4 flex-wrap">
+                    <div className="space-y-1.5 text-xs font-mono">
+
+                      {/* Identity */}
+                      <div className="flex items-center gap-3">
+                        <span className="text-slate-400 w-20 shrink-0">component</span>
+                        <span className="text-slate-700 font-semibold">{selectedCell.componentId}</span>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <span className="text-slate-400 w-20 shrink-0">core</span>
+                        <span className="text-slate-700">{selectedCell.coreId}</span>
+                      </div>
+
+                      {/* Result — with failure mode context */}
+                      <div className="flex items-center gap-3">
+                        <span className="text-slate-400 w-20 shrink-0">result</span>
+                        <span className={selectedCell.coreResult === "fail" ? "text-red-600 font-semibold" : "text-green-600 font-semibold"}>
+                          {selectedCell.coreResult.toUpperCase()}
+                        </span>
+                        {selectedCell.isLatched && <span className="text-red-700 text-[10px] bg-red-100 px-1.5 py-0.5 rounded">latched</span>}
+                        {selectedCell.isLatchedPass && <span className="text-amber-700 text-[10px] bg-amber-100 px-1.5 py-0.5 rounded">⚑ latch pending</span>}
+                        {selectedCell.failureMode && selectedCell.failureMode !== "none" && (
+                          <span className="text-slate-500 text-[10px] capitalize">{selectedCell.failureMode}</span>
+                        )}
+                      </div>
+
+                      {/* Test timestamp + duration — Aaron's ask: "timestamp of last result" */}
+                      <div className="flex items-center gap-3">
+                        <span className="text-slate-400 w-20 shrink-0">last test</span>
+                        <span className="text-slate-700" title={fmtDateTime(selectedCell.runStartedAt)}>
+                          {fmtRelative(selectedCell.runStartedAt)}
+                        </span>
+                        {selectedCell.runDurationMs != null && (
+                          <span className="text-slate-400">{selectedCell.runDurationMs}ms</span>
+                        )}
+                      </div>
+
+                      {/* Temperature */}
+                      <div className="flex items-center gap-3">
+                        <span className="text-slate-400 w-20 shrink-0">temperature</span>
+                        {selectedCell.temp != null ? (
+                          <span className={selectedCell.temp > 70 ? "text-amber-600 font-semibold" : "text-slate-700"}>
+                            {selectedCell.temp}°C{selectedCell.temp > 70 ? " ▲" : ""}
+                          </span>
+                        ) : <span className="text-slate-300">—</span>}
+                      </div>
+
+                      {/* Latency */}
+                      <div className="flex items-center gap-3">
+                        <span className="text-slate-400 w-20 shrink-0">latency</span>
+                        {selectedCell.latencyMs != null ? (
+                          <span className="text-slate-700">{selectedCell.latencyMs}ms</span>
+                        ) : <span className="text-slate-300">—</span>}
+                      </div>
+
+                      {/* Error code */}
+                      {selectedCell.errorCode && (
+                        <div className="flex items-center gap-3">
+                          <span className="text-slate-400 w-20 shrink-0">error</span>
+                          <span className="text-red-600 font-semibold">{selectedCell.errorCode}</span>
+                        </div>
+                      )}
+
+                      {/* Upstream fault source */}
+                      {selectedCell.trueFaultSource && selectedCell.coreResult === "fail" && (
+                        <div className="flex items-center gap-3">
+                          <span className="text-slate-400 w-20 shrink-0">upstream</span>
+                          <span className="text-amber-700">⚠ {selectedCell.trueFaultSource}</span>
+                        </div>
+                      )}
+
+                      {/* Latch timestamp — use safe fmtTime, not raw new Date() */}
+                      {selectedCell.latchInfo && (
+                        <div className="flex items-center gap-3">
+                          <span className="text-slate-400 w-20 shrink-0">latched at</span>
+                          <span className="text-amber-700">
+                            {fmtTime(selectedCell.latchInfo.latched_at)}
+                            {selectedCell.latchInfo.error_code && (
+                              <span className="ml-1.5 text-slate-500">{selectedCell.latchInfo.error_code}</span>
+                            )}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                    {/* Actions */}
+                    <div className="flex flex-col gap-2 shrink-0">
+                      <button
+                        disabled={rerunning}
+                        onClick={async () => {
+                          setRerunning(true);
+                          try { await api.demo.rerun(id); }
+                          catch { /* ignore */ }
+                          finally {
+                            if (rerunResetTimerRef.current) rerunResetTimerRef.current();
+                            const t = trackedTimeout(() => setRerunning(false), 2000);
+                            rerunResetTimerRef.current = t.clear;
+                          }
+                        }}
+                        className="text-xs px-3 py-1.5 rounded border border-slate-200 text-slate-600 hover:bg-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {rerunning ? "Running…" : "Rerun Test"}
+                      </button>
+                      {/* Latch / Clear latch */}
+                      {selectedCell.latchInfo ? (
+                        <button
+                          disabled={latching}
+                          onClick={async () => {
+                            setLatching(true);
+                            try {
+                              await api.clearLatch(id, selectedCell.componentId, selectedCell.coreId);
+                              const d = await api.device(id);
+                              setDevice(d as Record<string, unknown>);
+                              setSelectedCell(null);
+                            } catch { /* ignore */ }
+                            finally { setLatching(false); }
+                          }}
+                          className="text-xs px-3 py-1.5 rounded border border-amber-300 text-amber-700 hover:bg-amber-50 transition-colors disabled:opacity-50"
+                        >
+                          {latching ? "Clearing…" : "Clear Latch"}
+                        </button>
+                      ) : selectedCell.coreResult === "fail" ? (
+                        <button
+                          disabled={latching}
+                          onClick={async () => {
+                            setLatching(true);
+                            try {
+                              await api.latchCore(id, selectedCell.componentId, selectedCell.coreId, selectedCell.errorCode, selectedCell.runId);
+                              const d = await api.device(id);
+                              setDevice(d as Record<string, unknown>);
+                            } catch { /* ignore */ }
+                            finally { setLatching(false); }
+                          }}
+                          className="text-xs px-3 py-1.5 rounded border border-slate-300 text-slate-600 hover:bg-slate-50 transition-colors disabled:opacity-50"
+                        >
+                          {latching ? "Latching…" : "Latch Failure"}
+                        </button>
+                      ) : null}
+                      <button
+                        onClick={() => router.push("/alerts")}
+                        className="text-xs px-3 py-1.5 rounded border border-slate-200 text-slate-500 hover:bg-white transition-colors"
+                      >
+                        View Alerts
+                      </button>
+                    </div>
+                  </div>
                 </div>
               ) : (
-                <span className="text-[11px] text-slate-400 pl-1">Hover a cell for diagnostics</span>
+                <span className="text-[11px] text-slate-400">Click a cell to inspect</span>
               )}
             </div>
 
             {/* Legend */}
             <div className="flex items-center flex-wrap gap-x-5 gap-y-1 mt-3 pt-3 border-t border-slate-100 text-[11px] text-slate-500">
-              <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-green-500 inline-block" /> Pass</span>
-              <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-amber-400 inline-block" /> Testing</span>
-              <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-red-500 inline-block" /> Fail</span>
-              <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-red-700 inline-block" /> Latched (L)</span>
-              <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-amber-400 inline-block" /> Corrupted (~)</span>
+              <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-green-500 inline-block" /> Pass</span>
+              <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-amber-400 inline-block" /> Testing</span>
+              <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-red-500 inline-block" /> Fail</span>
+              <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-red-800 border-l-2 border-red-700 inline-block rounded-sm" /> Latched</span>
+              <span className="flex items-center gap-1.5">
+                <span className="relative w-2.5 h-2.5 inline-block">
+                  <span className="w-2.5 h-2.5 rounded-full bg-green-500 inline-block" />
+                  <span className="absolute -top-0.5 -right-1 text-[6px] text-amber-600 font-bold">⚑</span>
+                </span>
+                <span className="ml-1">Latched pass (⚑)</span>
+              </span>
+              <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-amber-400 inline-block" /> Corrupt</span>
               {latestRun?.failure_mode && (
                 <span className="ml-auto text-amber-600 font-medium capitalize">{latestRun.failure_mode} mode</span>
               )}
             </div>
           </div>
+
+          {/* Thermal Trend — time-series collection, pre-warming signal */}
+          {thermalReadings.length > 0 && (
+            <div className="bg-white border border-slate-200 rounded-lg p-4">
+              <ThermalTrendChart
+                readings={thermalReadings as Parameters<typeof ThermalTrendChart>[0]["readings"]}
+                queryInfo={thermalQueryInfo ?? undefined}
+              />
+            </div>
+          )}
 
           {/* Telemetry Chart */}
           <div className="bg-white border border-slate-200 rounded-lg p-4">
@@ -382,8 +624,8 @@ export default function DevicePage() {
                     <span className="text-slate-400 ml-auto">{expandedRun === run.id ? "▾" : "▸"} JSON</span>
                   </button>
                   {expandedRun === run.id && (
-                    <pre className="text-xs text-slate-600 bg-slate-50 border border-slate-100 rounded p-3 mt-1 overflow-auto max-h-48">
-                      {JSON.stringify(run, null, 2)}
+                    <pre className="text-xs bg-slate-50 border border-slate-100 rounded p-3 mt-1 overflow-auto max-h-48 font-mono leading-relaxed">
+                      <JsonLight code={JSON.stringify(run, null, 2)} />
                     </pre>
                   )}
                 </div>
@@ -440,13 +682,13 @@ export default function DevicePage() {
                   <table className="w-full text-xs">
                     <tbody className="divide-y divide-slate-50">
                       {[
-                        ["Temperature", `${latestRun.nvme_smart.temperature}°C`],
-                        ["Media Errors", latestRun.nvme_smart.media_errors],
-                        ["Err Log Entries", latestRun.nvme_smart.num_err_log_entries],
-                        ["Power-on Hours", latestRun.nvme_smart.power_on_hours.toLocaleString()],
-                        ["Unsafe Shutdowns", latestRun.nvme_smart.unsafe_shutdowns],
-                        ["Available Spare", `${latestRun.nvme_smart.available_spare}%`],
-                        ["% Used", `${latestRun.nvme_smart.percentage_used}%`],
+                        ["Temperature", latestRun.nvme_smart.temperature != null ? `${latestRun.nvme_smart.temperature}°C` : "—"],
+                        ["Media Errors", latestRun.nvme_smart.media_errors ?? "—"],
+                        ["Err Log Entries", latestRun.nvme_smart.num_err_log_entries ?? "—"],
+                        ["Power-on Hours", latestRun.nvme_smart.power_on_hours != null ? latestRun.nvme_smart.power_on_hours.toLocaleString() : "—"],
+                        ["Unsafe Shutdowns", latestRun.nvme_smart.unsafe_shutdowns ?? "—"],
+                        ["Available Spare", latestRun.nvme_smart.available_spare != null ? `${latestRun.nvme_smart.available_spare}%` : "—"],
+                        ["% Used", latestRun.nvme_smart.percentage_used != null ? `${latestRun.nvme_smart.percentage_used}%` : "—"],
                       ].map(([label, val]) => (
                         <tr key={String(label)}>
                           <td className="py-1.5 text-slate-500 font-mono">{label}</td>
@@ -461,9 +703,11 @@ export default function DevicePage() {
                       <div className="space-y-1">
                         {latestRun.nvme_errors.map((e, i) => (
                           <div key={i} className="text-[11px] text-slate-600 font-mono flex gap-2">
-                            <span className="text-slate-400">#{e.error_count}</span>
-                            <span>{e.description}</span>
-                            <span className="text-slate-400 ml-auto">0x{e.status_field.toString(16).padStart(2, "0")}</span>
+                            <span className="text-slate-400">#{e.error_count ?? i}</span>
+                            <span>{e.description ?? "—"}</span>
+                            {e.status_field != null && (
+                              <span className="text-slate-400 ml-auto">0x{Number(e.status_field).toString(16).padStart(2, "0")}</span>
+                            )}
                           </div>
                         ))}
                       </div>
@@ -486,8 +730,8 @@ export default function DevicePage() {
               </button>
               {rawDataOpen && (
                 <div id="doc-viewer" className="border-t border-slate-100">
-                  <pre className="text-xs text-slate-600 bg-slate-50 p-4 overflow-auto max-h-96">
-                    {JSON.stringify(latestRun, null, 2)}
+                  <pre className="text-xs bg-slate-50 p-4 overflow-auto max-h-96 font-mono leading-relaxed">
+                    <JsonLight code={JSON.stringify(latestRun, null, 2)} />
                   </pre>
                 </div>
               )}
@@ -495,6 +739,16 @@ export default function DevicePage() {
           )}
         </div>
       </div>
+      <RuntimeDebugPanel
+        title="Device Runtime"
+        metrics={{
+          runs: runs.length,
+          thermal_points: thermalReadings.length,
+          selected_cell: selectedCell ? 1 : 0,
+          sse_connected: sseConnected ? 1 : 0,
+          rerunning: rerunning ? 1 : 0,
+        }}
+      />
     </main>
   );
 }

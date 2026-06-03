@@ -7,6 +7,7 @@ interface Device {
   hostname: string;
   status: string;
   led_state?: LedState;
+  latched_failures?: Array<{ component_id: string; core_id: string }>;
 }
 
 interface ContextMenu {
@@ -33,10 +34,10 @@ function toCoord(deviceId: string): string {
 }
 
 const STATE_STYLES: Record<LedState, { border: string; bg: string; dot: string }> = {
-  green:         { border: "border-green-300",  bg: "bg-white",        dot: "bg-green-500 shadow-[0_0_4px_1px_rgba(34,197,94,0.5)]" },
-  flashing_green:{ border: "border-green-300",  bg: "bg-white",        dot: "bg-green-500 animate-pulse shadow-[0_0_4px_1px_rgba(34,197,94,0.5)]" },
-  amber:         { border: "border-amber-400",  bg: "bg-amber-50",     dot: "bg-amber-400 amber-blink" },
-  red:           { border: "border-red-300",    bg: "bg-red-50",       dot: "bg-red-600 shadow-[0_0_4px_1px_rgba(220,38,38,0.4)]" },
+  green:         { border: "border-slate-200",  bg: "bg-white",        dot: "bg-green-500" },
+  flashing_green:{ border: "border-slate-200",  bg: "bg-white",        dot: "bg-green-500 animate-pulse" },
+  amber:         { border: "border-amber-300",  bg: "bg-amber-50",     dot: "bg-amber-400 amber-blink" },
+  red:           { border: "border-red-300",    bg: "bg-red-50",       dot: "bg-red-600" },
   off:           { border: "border-slate-200",  bg: "bg-slate-50",     dot: "bg-slate-300" },
 };
 
@@ -53,9 +54,15 @@ export default function DeviceGrid({ devices, liveStates, pulses = {}, onDeviceC
 
   useEffect(() => {
     const close = () => setContextMenu(null);
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") close();
+    };
     document.addEventListener("click", close);
-    document.addEventListener("keydown", (e) => { if (e.key === "Escape") close(); });
-    return () => document.removeEventListener("click", close);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("click", close);
+      document.removeEventListener("keydown", onKeyDown);
+    };
   }, []);
 
   return (
@@ -66,13 +73,14 @@ export default function DeviceGrid({ devices, liveStates, pulses = {}, onDeviceC
           const pulse = pulses[device.device_id];
           const style = STATE_STYLES[ledState] ?? STATE_STYLES.green;
           const coord = toCoord(device.device_id);
+          const hasLatch = (device.latched_failures?.length ?? 0) > 0 && ledState !== "red";
 
           return (
             <div
               key={device.device_id}
               id={`led-${device.device_id}`}
-              className={`relative flex flex-col items-center gap-1 p-2.5 rounded-lg border cursor-pointer select-none
-                transition-all hover:shadow-md hover:scale-[1.02]
+              className={`relative flex flex-col items-center gap-1 p-2.5 rounded border cursor-pointer select-none
+                transition-colors hover:bg-slate-50
                 ${style.border} ${style.bg}`}
               onClick={() => onDeviceClick?.(device.device_id)}
               onContextMenu={(e) => {
@@ -96,6 +104,16 @@ export default function DeviceGrid({ devices, liveStates, pulses = {}, onDeviceC
               <span className="text-[10px] font-mono text-slate-600 leading-tight text-center">
                 {coord}
               </span>
+
+              {/* Latch indicator — device is passing now but has uncleared latched failure */}
+              {hasLatch && (
+                <span
+                  className="absolute top-1 right-1 text-[8px] text-amber-600 font-bold leading-none"
+                  title={`${device.latched_failures!.length} latched failure${device.latched_failures!.length !== 1 ? "s" : ""} — click to inspect`}
+                >
+                  ⚑
+                </span>
+              )}
 
               {/* Offline badge */}
               {device.status === "maintenance" && (

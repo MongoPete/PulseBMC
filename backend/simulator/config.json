@@ -13,14 +13,14 @@
     {"device_id": "device-009", "failure_rate": 0, "failure_mode": "none"},
     {"device_id": "device-010", "failure_rate": 0, "failure_mode": "none"},
     {"device_id": "device-011", "failure_rate": 0, "failure_mode": "none"},
-    {"device_id": "device-012", "failure_rate": 0, "failure_mode": "silent"},
+    {"device_id": "device-012", "failure_rate": 0.02, "failure_mode": "silent"},
     {"device_id": "device-013", "failure_rate": 0, "failure_mode": "none"},
     {"device_id": "device-014", "failure_rate": 0, "failure_mode": "none"},
-    {"device_id": "device-015", "failure_rate": 0, "failure_mode": "none"},
+    {"device_id": "device-015", "failure_rate": 0.03, "failure_mode": "intermittent"},
     {"device_id": "device-016", "failure_rate": 0, "failure_mode": "none"},
     {"device_id": "device-017", "failure_rate": 0, "failure_mode": "none"},
     {"device_id": "device-018", "failure_rate": 0, "failure_mode": "none"},
-    {"device_id": "device-019", "failure_rate": 0, "failure_mode": "none"},
+    {"device_id": "device-019", "failure_rate": 0.02, "failure_mode": "intermittent"},
     {"device_id": "device-020", "failure_rate": 0, "failure_mode": "none"}
   ]
 }

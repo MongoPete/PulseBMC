@@ -191,12 +191,13 @@ async def fleet_led_states():
     """
     Returns the most recent LED state per device — used by the fleet page to
     populate initial state on load (SSE only delivers deltas, not current state).
-    MongoDB: $sort + $group to pick the latest test_run per device.
+    MongoDB: index-aligned $sort + $group to pick the latest test_run per device.
     SQL: SELECT DISTINCT ON (device_id) device_id, led_state FROM test_runs ORDER BY device_id, started_at DESC
     """
     db = get_db()
     pipeline = [
-        {"$sort": {"started_at": -1}},
+        # Align with index { device_id: 1, started_at: -1 } to avoid an expensive global sort.
+        {"$sort": {"device_id": 1, "started_at": -1}},
         {"$group": {"_id": "$device_id", "led_state": {"$first": "$led_state"}, "status": {"$first": "$status"}}},
     ]
     docs = await db.test_runs.aggregate(pipeline).to_list(100)

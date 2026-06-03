@@ -1,6 +1,7 @@
+from datetime import datetime
 from fastapi import APIRouter, HTTPException, Query
 from app.db import get_db
-from app.models.device import Device, DeviceCreate
+from app.models.device import Device, DeviceCreate, LatchRequest, ClearLatchRequest
 from app.models.common import QueryInfo, PaginatedResponse
 from bson import ObjectId
 
@@ -57,3 +58,41 @@ async def create_device(device: DeviceCreate):
         raise HTTPException(status_code=409, detail="Device already exists")
     result = await db.devices.insert_one(device.model_dump())
     return {"id": str(result.inserted_id), "device_id": device.device_id}
+
+
+@router.post("/devices/{device_id}/latch", status_code=200)
+async def latch_failure(device_id: str, req: LatchRequest):
+    """Pin a failed core visible — stays latched until explicitly cleared."""
+    db = get_db()
+    # Remove any existing latch for the same component+core first (idempotent)
+    await db.devices.update_one(
+        {"device_id": device_id},
+        {"$pull": {"latched_failures": {"component_id": req.component_id, "core_id": req.core_id}}},
+    )
+    latch = {
+        "component_id": req.component_id,
+        "core_id": req.core_id,
+        "error_code": req.error_code,
+        "run_id": req.run_id,
+        "latched_at": datetime.utcnow().isoformat(),
+    }
+    result = await db.devices.update_one(
+        {"device_id": device_id},
+        {"$push": {"latched_failures": latch}},
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Device not found")
+    return {"device_id": device_id, "latched": latch}
+
+
+@router.post("/devices/{device_id}/latch/clear", status_code=200)
+async def clear_latch(device_id: str, req: ClearLatchRequest):
+    """Remove a latched failure — operator confirms fault has been addressed."""
+    db = get_db()
+    result = await db.devices.update_one(
+        {"device_id": device_id},
+        {"$pull": {"latched_failures": {"component_id": req.component_id, "core_id": req.core_id}}},
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Device not found")
+    return {"device_id": device_id, "cleared": {"component_id": req.component_id, "core_id": req.core_id}}

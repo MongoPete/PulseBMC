@@ -7,15 +7,15 @@ import ConceptBar from "@/components/ConceptBar";
 function SectionHeader({ title, subtitle }: { title: string; subtitle?: string }) {
   return (
     <div className="mb-6">
-      <h2 className="text-xl font-bold text-white">{title}</h2>
-      {subtitle && <p className="text-sm text-slate-300 mt-1">{subtitle}</p>}
+      <h2 className="text-xl font-bold text-slate-900">{title}</h2>
+      {subtitle && <p className="text-sm text-slate-500 mt-1">{subtitle}</p>}
     </div>
   );
 }
 
 function SqlBadge({ label }: { label: string }) {
   return (
-    <span className="text-[10px] bg-blue-800/70 border border-blue-500 text-blue-200 px-1.5 py-0.5 rounded font-mono">
+    <span className="text-[10px] bg-blue-50 border border-blue-300 text-blue-700 px-1.5 py-0.5 rounded font-mono">
       SQL: {label}
     </span>
   );
@@ -23,13 +23,13 @@ function SqlBadge({ label }: { label: string }) {
 
 function MgBadge({ label }: { label: string }) {
   return (
-    <span className="text-[10px] bg-emerald-800/70 border border-emerald-500 text-emerald-200 px-1.5 py-0.5 rounded font-mono">
+    <span className="text-[10px] bg-emerald-50 border border-emerald-300 text-emerald-700 px-1.5 py-0.5 rounded font-mono">
       MDB: {label}
     </span>
   );
 }
 
-// ── Syntax highlighting ──────────────────────────────────────────────────────
+// ── Syntax highlighting (light theme) ────────────────────────────────────────
 
 function tokenize(
   code: string,
@@ -55,12 +55,12 @@ const JSON_RE = /(\/\/[^\n]*)|(ObjectId|ISODate)\(("[^"]*")\)|("(?:[^"\\]|\\.)*"
 function JsonDoc({ code }: { code: string }) {
   return <>{tokenize(code, JSON_RE, ([full, comment, fn, fnArg, keyStr, keyColon, valStr, bool, num, op], k) => {
     if (comment) return <span key={k} className="text-slate-400 italic">{comment}</span>;
-    if (fn)      return <span key={k}><span className="text-violet-300 font-semibold">{fn}</span><span className="text-slate-500">(</span><span className="text-amber-300">{fnArg}</span><span className="text-slate-500">)</span></span>;
-    if (keyStr)  return <span key={k}><span className="text-sky-300 font-semibold">{keyStr}</span><span className="text-slate-400">{keyColon}</span></span>;
-    if (valStr)  return <span key={k} className="text-amber-300">{valStr}</span>;
-    if (bool)    return <span key={k} className="text-rose-300 font-semibold">{bool}</span>;
-    if (num)     return <span key={k} className="text-orange-300">{num}</span>;
-    if (op)      return <span key={k} className="text-emerald-400 font-semibold">{op}</span>;
+    if (fn)      return <span key={k}><span className="text-violet-600 font-semibold">{fn}</span><span className="text-slate-400">(</span><span className="text-emerald-700">{fnArg}</span><span className="text-slate-400">)</span></span>;
+    if (keyStr)  return <span key={k}><span className="text-slate-800 font-bold">{keyStr}</span><span className="text-slate-400">{keyColon}</span></span>;
+    if (valStr)  return <span key={k} className="text-emerald-700">{valStr}</span>;
+    if (bool)    return <span key={k} className="text-rose-600 font-semibold">{bool}</span>;
+    if (num)     return <span key={k} className="text-orange-600">{num}</span>;
+    if (op)      return <span key={k} className="text-emerald-600 font-semibold">{op}</span>;
     return <span key={k}>{full}</span>;
   })}</>;
 }
@@ -71,10 +71,10 @@ const SQL_RE = /(--[^\n]*)|('[^']*')|([-]?\d+(?:\.\d+)?)|(\b(?:SELECT|FROM|WHERE
 function SqlDoc({ code }: { code: string }) {
   return <>{tokenize(code, SQL_RE, ([full, comment, str, num, kw, type], k) => {
     if (comment) return <span key={k} className="text-slate-400 italic">{comment}</span>;
-    if (str)     return <span key={k} className="text-amber-300">{str}</span>;
-    if (num)     return <span key={k} className="text-orange-300">{num}</span>;
-    if (kw)      return <span key={k} className="text-blue-300 font-semibold">{kw}</span>;
-    if (type)    return <span key={k} className="text-cyan-300">{type}</span>;
+    if (str)     return <span key={k} className="text-emerald-700">{str}</span>;
+    if (num)     return <span key={k} className="text-orange-600">{num}</span>;
+    if (kw)      return <span key={k} className="text-blue-700 font-semibold">{kw}</span>;
+    if (type)    return <span key={k} className="text-cyan-700">{type}</span>;
     return <span key={k}>{full}</span>;
   })}</>;
 }
@@ -85,11 +85,11 @@ const GEN_RE = /(\/\/[^\n]*|#[^\n]*|--[^\n]*)|("[^"]*"|'[^']*')|(<[^>\n]+>)|(\$\
 function GenericCode({ code }: { code: string }) {
   return <>{tokenize(code, GEN_RE, ([full, comment, str, placeholder, op, kw, num], k) => {
     if (comment)     return <span key={k} className="text-slate-400 italic">{comment}</span>;
-    if (str)         return <span key={k} className="text-amber-300">{str}</span>;
-    if (placeholder) return <span key={k} className="text-violet-300">{placeholder}</span>;
-    if (op)          return <span key={k} className="text-emerald-400 font-semibold">{op}</span>;
-    if (kw)          return <span key={k} className="text-blue-300">{kw}</span>;
-    if (num)         return <span key={k} className="text-orange-300">{num}</span>;
+    if (str)         return <span key={k} className="text-emerald-700">{str}</span>;
+    if (placeholder) return <span key={k} className="text-violet-600">{placeholder}</span>;
+    if (op)          return <span key={k} className="text-emerald-600 font-semibold">{op}</span>;
+    if (kw)          return <span key={k} className="text-blue-700 font-semibold">{kw}</span>;
+    if (num)         return <span key={k} className="text-orange-600">{num}</span>;
     return <span key={k}>{full}</span>;
   })}</>;
 }
@@ -97,7 +97,7 @@ function GenericCode({ code }: { code: string }) {
 // ── 1. System flow diagram ───────────────────────────────────────────────────
 
 function FlowArrow() {
-  return <div className="flex items-center text-slate-300 text-xl px-1 select-none font-bold">→</div>;
+  return <div className="flex items-center text-slate-400 text-xl px-1 select-none font-bold">→</div>;
 }
 
 function FlowBox({
@@ -106,26 +106,26 @@ function FlowBox({
   label: string; sub: string; color?: "green" | "blue" | "amber" | "indigo" | "slate";
 }) {
   const colors = {
-    green:  "border-emerald-500 bg-emerald-900/50 text-emerald-200",
-    blue:   "border-blue-500 bg-blue-900/50 text-blue-200",
-    amber:  "border-amber-500 bg-amber-900/50 text-amber-200",
-    indigo: "border-indigo-500 bg-indigo-900/50 text-indigo-200",
-    slate:  "border-slate-500 bg-slate-700/60 text-slate-100",
+    green:  "border-emerald-300 bg-emerald-50 text-emerald-800",
+    blue:   "border-blue-300 bg-blue-50 text-blue-800",
+    amber:  "border-amber-300 bg-amber-50 text-amber-800",
+    indigo: "border-indigo-300 bg-indigo-50 text-indigo-800",
+    slate:  "border-slate-300 bg-white text-slate-700",
   };
   return (
     <div className={`border-2 rounded-xl px-4 py-3 text-center min-w-[130px] ${colors[color]}`}>
       <div className="text-sm font-bold">{label}</div>
-      <div className="text-[11px] mt-0.5 opacity-90">{sub}</div>
+      <div className="text-[11px] mt-0.5 opacity-80">{sub}</div>
     </div>
   );
 }
 
 function ArchFlowDiagram() {
   return (
-    <div className="bg-slate-900 border border-slate-600 rounded-xl p-6 space-y-6">
+    <div className="bg-white border border-slate-200 rounded-xl p-6 space-y-6 shadow-sm">
       {/* Main horizontal flow */}
       <div>
-        <p className="text-xs text-slate-300 uppercase tracking-wide mb-4 font-bold">Write path — loopback data to Atlas</p>
+        <p className="text-xs text-slate-500 uppercase tracking-wide mb-4 font-bold">Write path — loopback data to Atlas</p>
         <div className="flex items-center gap-1 flex-wrap">
           <FlowBox label="BMC Device" sub="hardware under test" color="amber" />
           <FlowArrow />
@@ -138,11 +138,11 @@ function ArchFlowDiagram() {
       </div>
 
       {/* Divider */}
-      <div className="border-t border-slate-600" />
+      <div className="border-t border-slate-200" />
 
       {/* Read + real-time path */}
       <div>
-        <p className="text-xs text-slate-300 uppercase tracking-wide mb-4 font-bold">Read path — real-time to browser</p>
+        <p className="text-xs text-slate-500 uppercase tracking-wide mb-4 font-bold">Read path — real-time to browser</p>
         <div className="flex items-center gap-1 flex-wrap">
           <FlowBox label="MongoDB Atlas" sub="Change Stream on insert" color="green" />
           <FlowArrow />
@@ -155,11 +155,11 @@ function ArchFlowDiagram() {
       </div>
 
       {/* Divider */}
-      <div className="border-t border-slate-600" />
+      <div className="border-t border-slate-200" />
 
       {/* AI path */}
       <div>
-        <p className="text-xs text-slate-300 uppercase tracking-wide mb-4 font-bold">AI path — alert → diagnosis → work order</p>
+        <p className="text-xs text-slate-500 uppercase tracking-wide mb-4 font-bold">AI path — alert → diagnosis → work order</p>
         <div className="flex items-center gap-1 flex-wrap">
           <FlowBox label="Alert fires" sub="failure_rate > 10%" color="amber" />
           <FlowArrow />
@@ -172,8 +172,8 @@ function ArchFlowDiagram() {
       </div>
 
       {/* SQL annotation */}
-      <p className="text-xs text-slate-300 border-t border-slate-600 pt-3">
-        SQL equivalent: the Change Stream is like a stored procedure <span className="font-mono text-blue-300">TRIGGER AFTER INSERT</span> + <span className="font-mono text-blue-300">LISTEN/NOTIFY</span> across a network socket. The aggregation alert check replaces a scheduled <span className="font-mono text-blue-300">GROUP BY</span> job.
+      <p className="text-xs text-slate-500 border-t border-slate-200 pt-3 leading-relaxed">
+        SQL equivalent: the Change Stream is like a stored procedure <span className="font-mono text-blue-700">TRIGGER AFTER INSERT</span> + <span className="font-mono text-blue-700">LISTEN/NOTIFY</span> across a network socket. The aggregation alert check replaces a scheduled <span className="font-mono text-blue-700">GROUP BY</span> job.
       </p>
     </div>
   );
@@ -257,16 +257,16 @@ function ERDiagram() {
 
       <div className="flex items-start gap-2 flex-1">
         {/* test_runs */}
-        <div className="flex-1 border-2 border-blue-500 rounded-lg overflow-hidden min-w-0">
-          <div className="bg-blue-800 px-3 py-2 text-xs font-bold text-white text-center tracking-wide">
+        <div className="flex-1 border-2 border-blue-400 rounded-lg overflow-hidden min-w-0">
+          <div className="bg-blue-600 px-3 py-2 text-xs font-bold text-white text-center tracking-wide">
             test_runs
           </div>
-          <div className="divide-y divide-slate-700/50">
+          <div className="divide-y divide-slate-200">
             {TABLE1_COLS.map((col) => (
-              <div key={col.name} className={`flex items-center gap-1.5 px-2.5 py-1.5 ${col.pk ? "bg-yellow-950/40" : "bg-slate-950"}`}>
+              <div key={col.name} className={`flex items-center gap-1.5 px-2.5 py-1.5 ${col.pk ? "bg-amber-50" : "bg-white"}`}>
                 <span className="text-[11px] w-4 text-center shrink-0">{col.pk ? "🔑" : "·"}</span>
-                <span className={`font-mono text-[11px] truncate ${col.pk ? "text-yellow-300 font-bold" : "text-slate-200"}`}>{col.name}</span>
-                <span className="ml-auto font-mono text-[10px] text-cyan-400 shrink-0">{col.type}</span>
+                <span className={`font-mono text-[11px] truncate ${col.pk ? "text-amber-700 font-bold" : "text-slate-700"}`}>{col.name}</span>
+                <span className="ml-auto font-mono text-[10px] text-cyan-700 shrink-0">{col.type}</span>
               </div>
             ))}
           </div>
@@ -274,30 +274,30 @@ function ERDiagram() {
 
         {/* Connector */}
         <div className="flex flex-col items-center shrink-0 pt-8 gap-0.5 w-14">
-          <span className="text-sm font-bold text-blue-300 mb-1">1</span>
+          <span className="text-sm font-bold text-blue-600 mb-1">1</span>
           <div className="w-full h-0.5 bg-blue-400" />
           <div className="flex flex-col items-center -mt-0.5">
             <div className="w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-t-[8px] border-t-blue-400" />
           </div>
-          <span className="text-[9px] font-mono text-blue-200 bg-blue-900 px-1.5 py-0.5 rounded border border-blue-600 my-1">JOIN</span>
+          <span className="text-[9px] font-mono text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-300 my-1">JOIN</span>
           <div className="flex flex-col items-center -mb-0.5">
             <div className="w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-b-[8px] border-b-orange-400" />
           </div>
           <div className="w-full h-0.5 bg-orange-400" />
-          <span className="text-sm font-bold text-orange-300 mt-1">N</span>
+          <span className="text-sm font-bold text-orange-600 mt-1">N</span>
         </div>
 
         {/* test_run_components */}
-        <div className="flex-1 border-2 border-orange-500 rounded-lg overflow-hidden min-w-0">
-          <div className="bg-orange-900/80 px-3 py-2 text-xs font-bold text-white text-center tracking-wide">
+        <div className="flex-1 border-2 border-orange-400 rounded-lg overflow-hidden min-w-0">
+          <div className="bg-orange-600 px-3 py-2 text-xs font-bold text-white text-center tracking-wide">
             test_run_components
           </div>
-          <div className="divide-y divide-slate-700/50">
+          <div className="divide-y divide-slate-200">
             {TABLE2_COLS.map((col) => (
-              <div key={col.name} className={`flex items-center gap-1.5 px-2.5 py-1.5 ${col.pk ? "bg-yellow-950/40" : col.fk ? "bg-orange-950/40" : "bg-slate-950"}`}>
+              <div key={col.name} className={`flex items-center gap-1.5 px-2.5 py-1.5 ${col.pk ? "bg-amber-50" : col.fk ? "bg-orange-50" : "bg-white"}`}>
                 <span className="text-[11px] w-4 text-center shrink-0">{col.pk ? "🔑" : col.fk ? "🔗" : "·"}</span>
-                <span className={`font-mono text-[11px] truncate ${col.pk ? "text-yellow-300 font-bold" : col.fk ? "text-orange-300 font-bold" : "text-slate-200"}`}>{col.name}</span>
-                <span className="ml-auto font-mono text-[10px] text-cyan-400 shrink-0">{col.type}</span>
+                <span className={`font-mono text-[11px] truncate ${col.pk ? "text-amber-700 font-bold" : col.fk ? "text-orange-700 font-bold" : "text-slate-700"}`}>{col.name}</span>
+                <span className="ml-auto font-mono text-[10px] text-cyan-700 shrink-0">{col.type}</span>
               </div>
             ))}
           </div>
@@ -305,14 +305,14 @@ function ERDiagram() {
       </div>
 
       {/* JOIN statement */}
-      <div className="bg-slate-800 border border-slate-600 rounded-lg px-4 py-2.5 text-xs font-mono text-slate-300 text-center">
-        <span className="text-blue-300 font-bold">JOIN</span>
+      <div className="bg-slate-50 border border-slate-200 rounded-lg px-4 py-2.5 text-xs font-mono text-slate-600 text-center">
+        <span className="text-blue-700 font-bold">JOIN</span>
         {" test_run_components c "}
-        <span className="text-blue-300 font-bold">ON</span>
+        <span className="text-blue-700 font-bold">ON</span>
         {" c.run_id = r.id"}
       </div>
 
-      <p className="text-[10px] text-slate-500 text-center leading-relaxed">
+      <p className="text-[10px] text-slate-400 text-center leading-relaxed">
         Every loopback read must cross this JOIN — 20 devices × many runs = many paired reads
       </p>
     </div>
@@ -322,12 +322,12 @@ function ERDiagram() {
 function SqlFlipCard() {
   const [flipped, setFlipped] = useState(false);
   return (
-    <div className="border-2 border-blue-500 rounded-xl overflow-hidden flex flex-col">
+    <div className="border-2 border-blue-300 rounded-xl overflow-hidden flex flex-col bg-white">
       {/* Header */}
-      <div className="bg-blue-900/60 px-4 py-2.5 flex items-center justify-between border-b border-blue-500 shrink-0">
-        <span className="text-sm font-bold text-blue-100">SQL — Normalized (2 tables)</span>
+      <div className="bg-blue-50 px-4 py-2.5 flex items-center justify-between border-b border-blue-200 shrink-0">
+        <span className="text-sm font-bold text-blue-800">SQL — Normalized (2 tables)</span>
         <div className="flex items-center gap-2">
-          <span className="text-[11px] text-blue-300 font-mono font-semibold">PostgreSQL</span>
+          <span className="text-[11px] text-blue-600 font-mono font-semibold">PostgreSQL</span>
           <button
             onClick={() => setFlipped((f) => !f)}
             className="text-[10px] bg-blue-600 hover:bg-blue-500 active:bg-blue-700 text-white px-2.5 py-0.5 rounded-full transition-colors font-semibold"
@@ -349,14 +349,14 @@ function SqlFlipCard() {
         >
           {/* Front — SQL code */}
           <div className="absolute inset-0 overflow-auto" style={{ backfaceVisibility: "hidden" }}>
-            <pre className="text-xs text-slate-300 p-4 leading-relaxed bg-slate-950 min-h-full">
+            <pre className="text-xs text-slate-700 p-4 leading-relaxed bg-slate-50 min-h-full">
               <SqlDoc code={SQL_SCHEMA} />
             </pre>
           </div>
 
           {/* Back — ER diagram */}
           <div
-            className="absolute inset-0 bg-slate-900 p-5 overflow-auto"
+            className="absolute inset-0 bg-white p-5 overflow-auto"
             style={{ backfaceVisibility: "hidden", transform: "rotateY(180deg)" }}
           >
             <ERDiagram />
@@ -365,7 +365,7 @@ function SqlFlipCard() {
       </div>
 
       {/* Footer */}
-      <div className="bg-blue-900/50 px-4 py-2 text-[11px] text-blue-200 border-t border-blue-500 font-semibold shrink-0">
+      <div className="bg-blue-50 px-4 py-2 text-[11px] text-blue-700 border-t border-blue-200 font-semibold shrink-0">
         ⚠ Every read of a full result requires a JOIN across 2 tables
       </div>
     </div>
@@ -379,15 +379,15 @@ function DocumentModelPanel() {
       <SqlFlipCard />
 
       {/* MongoDB */}
-      <div className="border-2 border-emerald-500 rounded-xl overflow-hidden flex flex-col">
-        <div className="bg-emerald-900/60 px-4 py-2.5 flex items-center justify-between border-b border-emerald-500 shrink-0">
-          <span className="text-sm font-bold text-emerald-100">MongoDB — Embedded document</span>
-          <span className="text-[11px] text-emerald-300 font-mono font-semibold">Atlas</span>
+      <div className="border-2 border-emerald-300 rounded-xl overflow-hidden flex flex-col bg-white">
+        <div className="bg-emerald-50 px-4 py-2.5 flex items-center justify-between border-b border-emerald-200 shrink-0">
+          <span className="text-sm font-bold text-emerald-800">MongoDB — Embedded document</span>
+          <span className="text-[11px] text-emerald-600 font-mono font-semibold">Atlas</span>
         </div>
-        <pre className="text-xs text-slate-300 p-4 overflow-auto leading-relaxed bg-slate-950 flex-1" style={{ minHeight: "420px" }}>
+        <pre className="text-xs text-slate-700 p-4 overflow-auto leading-relaxed bg-slate-50 flex-1" style={{ minHeight: "420px" }}>
           <JsonDoc code={MDB_DOC} />
         </pre>
-        <div className="bg-emerald-900/50 px-4 py-2 text-[11px] text-emerald-200 border-t border-emerald-500 font-semibold shrink-0">
+        <div className="bg-emerald-50 px-4 py-2 text-[11px] text-emerald-700 border-t border-emerald-200 font-semibold shrink-0">
           ✓ One <span className="font-mono">find()</span> call returns the full result — components included
         </div>
       </div>
@@ -472,7 +472,7 @@ async for change in collection.watch():
     sqlEquiv: "Child table + JOIN",
     mgEquiv: "Nested objects / arrays in a document",
     where: "test_runs.results.components[] — PCIe card results",
-    why: "Component results (pcie_card_1, 2, 3) live inside the same document as the test run. No JOIN needed — one read gets everything. The 16×16 core grid renders from a single document fetch.",
+    why: "Component results (pcie_card_1, 2, 3) live inside the same document as the test run. No JOIN needed — one read gets everything. The core grid renders from a single document fetch.",
     code: `// Query: which runs had pcie_card_1 failures?
 // No JOIN — query the nested array directly
 db.test_runs.find({
@@ -495,44 +495,44 @@ db.test_runs.find({
 ];
 
 const FEATURE_STYLES = {
-  green:  { border: "border-emerald-500", header: "bg-emerald-900/60 border-emerald-500", title: "text-emerald-200" },
-  blue:   { border: "border-blue-500",    header: "bg-blue-900/60 border-blue-500",       title: "text-blue-200"   },
-  indigo: { border: "border-indigo-500",  header: "bg-indigo-900/60 border-indigo-500",   title: "text-indigo-200" },
-  amber:  { border: "border-amber-500",   header: "bg-amber-900/60 border-amber-500",     title: "text-amber-200"  },
+  green:  { border: "border-emerald-300", header: "bg-emerald-50 border-emerald-200", title: "text-emerald-800" },
+  blue:   { border: "border-blue-300",    header: "bg-blue-50 border-blue-200",       title: "text-blue-800"   },
+  indigo: { border: "border-indigo-300",  header: "bg-indigo-50 border-indigo-200",   title: "text-indigo-800" },
+  amber:  { border: "border-amber-300",   header: "bg-amber-50 border-amber-200",     title: "text-amber-800"  },
 };
 
 function FeatureCard({ f }: { f: Feature }) {
   const [open, setOpen] = useState(false);
   const s = FEATURE_STYLES[f.color];
   return (
-    <div className={`border-2 ${s.border} rounded-xl overflow-hidden`}>
+    <div className={`border-2 ${s.border} rounded-xl overflow-hidden bg-white`}>
       <div className={`border-b ${s.header} px-5 py-4`}>
         <div className="flex items-start justify-between gap-3 flex-wrap">
           <div>
             <h3 className={`text-base font-bold ${s.title}`}>{f.title}</h3>
             <div className="flex items-center gap-2 mt-1.5 flex-wrap">
               <SqlBadge label={f.sqlEquiv} />
-              <span className="text-slate-300 text-xs font-bold">→</span>
+              <span className="text-slate-400 text-xs font-bold">→</span>
               <MgBadge label={f.mgEquiv} />
             </div>
           </div>
-          <span className="text-xs text-slate-200 border border-slate-500 bg-slate-700/60 rounded px-2 py-0.5 shrink-0">
+          <span className="text-xs text-slate-500 border border-slate-300 bg-white rounded px-2 py-0.5 shrink-0">
             used in: {f.where}
           </span>
         </div>
-        <p className="text-sm text-slate-100 mt-3 leading-relaxed">{f.why}</p>
+        <p className="text-sm text-slate-700 mt-3 leading-relaxed">{f.why}</p>
       </div>
 
-      <div className="bg-slate-900">
+      <div className="bg-white">
         <button
           onClick={() => setOpen((o) => !o)}
-          className="w-full flex items-center justify-between px-5 py-2.5 text-xs text-slate-300 hover:text-white hover:bg-slate-800 transition-colors font-semibold"
+          className="w-full flex items-center justify-between px-5 py-2.5 text-xs text-slate-500 hover:text-slate-900 hover:bg-slate-50 transition-colors font-semibold"
         >
           <span>Show code example</span>
           <span>{open ? "▾" : "▸"}</span>
         </button>
         {open && (
-          <pre className="text-xs text-slate-300 px-5 pb-5 overflow-auto leading-relaxed bg-slate-950">
+          <pre className="text-xs text-slate-700 px-5 pb-5 overflow-auto leading-relaxed bg-slate-50">
             <GenericCode code={f.code} />
           </pre>
         )}
@@ -586,13 +586,13 @@ function BenefitsGrid() {
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
       {BENEFITS.map((b) => (
-        <div key={b.title} className="bg-slate-800 border border-slate-600 rounded-xl p-4 space-y-2">
+        <div key={b.title} className="bg-white border border-slate-200 rounded-xl p-4 space-y-2 shadow-sm">
           <div className="flex items-center gap-2">
             <span className="text-xl">{b.icon}</span>
-            <h3 className="text-sm font-bold text-white">{b.title}</h3>
+            <h3 className="text-sm font-bold text-slate-900">{b.title}</h3>
           </div>
-          <p className="text-sm text-slate-200 leading-relaxed">{b.body}</p>
-          <p className="text-[11px] text-slate-400 border-t border-slate-600 pt-2 font-mono leading-relaxed">
+          <p className="text-sm text-slate-600 leading-relaxed">{b.body}</p>
+          <p className="text-[11px] text-slate-400 border-t border-slate-200 pt-2 font-mono leading-relaxed">
             {b.sql}
           </p>
         </div>
@@ -601,28 +601,244 @@ function BenefitsGrid() {
   );
 }
 
+// ── 0. Why this exists (ByteDance paper POV) ─────────────────────────────────
+
+const DETECTION_ROWS = [
+  { failure: "NIC crash",        withMonitoring: "30 s",  without: "~10 min", note: "NIC/network sensor_type" },
+  { failure: "GPU driver hang",  withMonitoring: "10 s",  without: "~10 min", note: "process hang detection" },
+  { failure: "OS kernel fault",  withMonitoring: "2 s",   without: "~10 min", note: "kernel event sensor" },
+  { failure: "PCIe degradation", withMonitoring: "pre-warn via thermal trend", without: "hard crash / timeout", note: "telemetry time-series — what PulseBMC adds" },
+];
+
+function WhyItExistsSection() {
+  return (
+    <section className="space-y-6">
+      <SectionHeader
+        title="Why This Exists"
+        subtitle={`The analytical foundation — "Robust LLM Training Infrastructure at ByteDance" (SOSP '25, arXiv:2509.16293)`}
+      />
+
+      <div className="bg-white border border-slate-200 rounded-xl p-5 space-y-3 shadow-sm">
+        <p className="text-sm text-slate-700 leading-relaxed">
+          ByteDance published a study of <span className="text-slate-900 font-semibold">778,135 training jobs</span> over 3 months
+          on GPU clusters. The core finding: without real-time sensor monitoring, infrastructure teams wait for a process timeout
+          (NCCL, PyTorch Distributed) to learn hardware has already failed — burning 10+ minutes of GPU cycles per incident.
+        </p>
+        <p className="text-sm text-slate-600 leading-relaxed">
+          PulseBMC applies that same principle to <span className="text-slate-900 font-semibold">server / BMC hardware</span>:{" "}
+          if you wait for a hard crash to detect a PCIe link degrading from x16 to x1, you have already lost significant
+          operational time. The telemetry time-series collection is specifically designed to surface the pre-warning signal —
+          temperature rising <em>before</em> the LED changes.
+        </p>
+      </div>
+
+      <div>
+        <p className="text-xs text-slate-500 uppercase tracking-wide font-semibold mb-3">
+          Table 3 — Detection time: with vs without proactive monitoring
+        </p>
+        <div className="overflow-x-auto rounded-xl border border-slate-200 shadow-sm">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="bg-slate-100 border-b border-slate-200">
+                <th className="text-left px-4 py-2.5 text-slate-600 font-semibold">Failure type</th>
+                <th className="text-left px-4 py-2.5 text-emerald-700 font-semibold">With monitoring</th>
+                <th className="text-left px-4 py-2.5 text-red-600 font-semibold">Without monitoring</th>
+                <th className="text-left px-4 py-2.5 text-slate-500 font-semibold">PulseBMC mapping</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {DETECTION_ROWS.map((r, i) => (
+                <tr key={r.failure} className={i % 2 === 0 ? "bg-white" : "bg-slate-50"}>
+                  <td className="px-4 py-2.5 font-mono text-slate-700">{r.failure}</td>
+                  <td className="px-4 py-2.5 text-emerald-700 font-semibold">{r.withMonitoring}</td>
+                  <td className="px-4 py-2.5 text-red-600">{r.without}</td>
+                  <td className="px-4 py-2.5 text-slate-500">{r.note}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <p className="text-[11px] text-slate-400 mt-2">
+          Source: ByteDance SOSP &apos;25 (arXiv:2509.16293) Table 3 — rows 1–3 from the paper; row 4 is PulseBMC&apos;s extension to BMC hardware.
+        </p>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        {[
+          { pct: "71%",   label: "Explicit failures",  desc: "Clear error signal. 2–15 min to localize with proactive monitoring.", color: "border-red-300 bg-red-50" },
+          { pct: "10%+",  label: "Implicit failures",  desc: "No error. Job hangs, MFU decline, silent data corruption. Can take 1.5+ hours manually.", color: "border-amber-300 bg-amber-50" },
+          { pct: "17.3%", label: "Human-introduced",   desc: "Manual restarts are as significant a failure source as hardware.", color: "border-slate-300 bg-slate-50" },
+        ].map((s) => (
+          <div key={s.label} className={`border-2 rounded-xl p-4 ${s.color}`}>
+            <div className="text-2xl font-bold text-slate-900 mb-1">{s.pct}</div>
+            <div className="text-sm font-semibold text-slate-700 mb-1">{s.label}</div>
+            <div className="text-xs text-slate-600 leading-relaxed">{s.desc}</div>
+          </div>
+        ))}
+      </div>
+
+      <div className="bg-white border-l-4 border-l-teal-500 border border-slate-200 rounded-xl px-5 py-4 shadow-sm">
+        <p className="text-sm text-slate-700 leading-relaxed">
+          <span className="font-semibold text-slate-900">The implicit failure category is where PulseBMC focuses.</span>{" "}
+          The AI root cause chain — vector search over past incidents, LLM hypothesis, work order — compresses what took
+          ByteDance engineers 1.5+ hours into a structured output in seconds. The telemetry time-series collection
+          captures the pre-warning signal that makes explicit failures detectable before they become downtime.
+        </p>
+      </div>
+    </section>
+  );
+}
+
+// ── 5. Collections reference ──────────────────────────────────────────────────
+
+const COLLECTIONS = [
+  {
+    name: "devices",
+    sqlEquiv: "devices table",
+    type: "Standard document",
+    purpose: "Device registry — state machine (online → maintenance → offline), hardware metadata, latched failures.",
+    key: "device_id (unique), location.datacenter + status compound",
+  },
+  {
+    name: "telemetry",
+    sqlEquiv: "No direct SQL equivalent — closest is TimescaleDB hypertable",
+    type: "Native time-series collection",
+    purpose: "Continuous sensor readings per device. timeField: ts · metaField: meta (device_id, sensor_type). Automatic bucketing gives ~70–90% storage reduction. Thermal baseline stored here is the pre-warning signal.",
+    key: "{ meta.device_id: 1, ts: -1 } secondary index",
+    highlight: true,
+  },
+  {
+    name: "test_runs",
+    sqlEquiv: "test_runs + test_run_components (2 tables)",
+    type: "Standard document + vector index",
+    purpose: "Loopback test results with embedded component/core results. 1,024-dim Voyage AI embedding for vector similarity search. Primary RAG corpus for root cause analysis.",
+    key: "(device_id, started_at), vector index: test_runs_vector_idx",
+  },
+  {
+    name: "alerts",
+    sqlEquiv: "alerts table",
+    type: "Standard document",
+    purpose: "Failure events auto-created when failure rate exceeds 10% threshold. Linked to test_runs supporting the signal.",
+    key: "(device_id, status, triggered_at)",
+  },
+  {
+    name: "agent_runs",
+    sqlEquiv: "No SQL equivalent — audit log of AI chain executions",
+    type: "Standard document",
+    purpose: "Full trace of every AI chain run: input, retrieved docs, tool calls, LLM output (prediction + root cause + work order). Grows into a knowledge base — future RCAs query past high-confidence hypotheses.",
+    key: "(agent_type, created_at)",
+  },
+];
+
+function CollectionsTable() {
+  return (
+    <section className="space-y-4">
+      <SectionHeader
+        title="Collections Reference"
+        subtitle="Five collections in the pulse_bmc database — each mapped to its SQL equivalent"
+      />
+      <div className="space-y-3">
+        {COLLECTIONS.map((c) => (
+          <div
+            key={c.name}
+            className={`border rounded-xl overflow-hidden bg-white shadow-sm ${c.highlight ? "border-teal-400" : "border-slate-200"}`}
+          >
+            <div className={`flex items-start justify-between gap-4 px-5 py-3 border-b flex-wrap ${c.highlight ? "bg-teal-50 border-teal-200" : "bg-slate-50 border-slate-200"}`}>
+              <div className="flex items-center gap-3 flex-wrap">
+                <span className={`font-mono text-sm font-bold ${c.highlight ? "text-teal-700" : "text-slate-800"}`}>{c.name}</span>
+                <span className={`text-[10px] px-1.5 py-0.5 rounded border font-mono ${c.highlight ? "bg-teal-100 border-teal-300 text-teal-700" : "bg-white border-slate-300 text-slate-500"}`}>
+                  {c.type}
+                </span>
+              </div>
+              <SqlBadge label={c.sqlEquiv} />
+            </div>
+            <div className="px-5 py-3 bg-white space-y-1.5">
+              <p className="text-sm text-slate-700 leading-relaxed">{c.purpose}</p>
+              <p className="text-[11px] font-mono text-slate-400">Indexes: {c.key}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+// ── 6. MongoDB vs alternative stacks ─────────────────────────────────────────
+
+const ALT_STACKS = [
+  {
+    vs: "Postgres + TimescaleDB",
+    problem: "Two separate products to operate. TimescaleDB handles time-series but not vector search. A third tool (pgvector or Pinecone) is needed for embeddings. Schema migrations required when new hardware classes appear.",
+    mongodb: "One Atlas cluster handles time-series (native collection), document store, and vector search. New hardware types are addable without migrations.",
+  },
+  {
+    vs: "InfluxDB + Postgres + Pinecone",
+    problem: "Three products, three query languages, three operational surfaces. ETL pipelines connect them. Joins across stores require application-layer code.",
+    mongodb: "Telemetry, structured records, and 1,024-dim vectors all live in the same database, queried with the same aggregation pipeline.",
+  },
+  {
+    vs: "Relational schema for evidence",
+    problem: "PCIe failures, thermal anomalies, NIC events, and silent data corruption all have different evidence fields. A relational schema forces nullable columns or an EAV table — both are hard to query.",
+    mongodb: "The evidence subdoc varies by failure type. Each document embeds exactly the fields relevant to its failure class. No nullable columns, no schema migration when a new failure type is added.",
+  },
+];
+
+function AlternativeStacksSection() {
+  return (
+    <section className="space-y-4">
+      <SectionHeader
+        title="Why MongoDB Instead of the Typical Stack"
+        subtitle="The alternative stacks and why they fragment for this specific workload"
+      />
+      <div className="space-y-3">
+        {ALT_STACKS.map((s) => (
+          <div key={s.vs} className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+            <div className="flex items-center gap-3 px-5 py-3 border-b border-slate-200 bg-slate-50">
+              <span className="text-xs font-mono text-red-600 bg-red-50 border border-red-200 rounded px-2 py-0.5">vs</span>
+              <span className="text-sm font-semibold text-slate-700">{s.vs}</span>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-slate-200">
+              <div className="px-5 py-4">
+                <p className="text-[10px] text-red-500 uppercase tracking-wide font-semibold mb-1.5">Problem with that stack</p>
+                <p className="text-sm text-slate-600 leading-relaxed">{s.problem}</p>
+              </div>
+              <div className="px-5 py-4">
+                <p className="text-[10px] text-emerald-600 uppercase tracking-wide font-semibold mb-1.5">MongoDB approach</p>
+                <p className="text-sm text-slate-700 leading-relaxed">{s.mongodb}</p>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 // ── Page ─────────────────────────────────────────────────────────────────────
 
 export default function ArchitecturePage() {
   return (
-    <div>
+    <div className="bg-[#F4F7F9] min-h-screen">
       <ConceptBar />
       <main className="max-w-6xl mx-auto px-4 py-8 space-y-14">
 
         {/* Hero */}
         <div>
-          <h1 className="text-3xl font-bold text-white">How It Works</h1>
-          <p className="text-slate-300 mt-2 max-w-2xl text-sm leading-relaxed">
+          <h1 className="text-3xl font-bold text-slate-900">How It Works</h1>
+          <p className="text-slate-600 mt-2 max-w-2xl text-sm leading-relaxed">
             PulseBMC stores hardware telemetry in MongoDB Atlas — a document database that keeps related data together (no JOINs), streams live changes to the browser, and runs AI-powered root cause analysis inside the same cluster.
           </p>
           <div className="flex items-center gap-3 mt-4 flex-wrap">
-            <span className="text-xs text-slate-200 border border-slate-500 bg-slate-700/60 rounded-full px-3 py-1">MongoDB Atlas M0</span>
-            <span className="text-xs text-slate-200 border border-slate-500 bg-slate-700/60 rounded-full px-3 py-1">FastAPI + Motor (async Python)</span>
-            <span className="text-xs text-slate-200 border border-slate-500 bg-slate-700/60 rounded-full px-3 py-1">Next.js + SSE</span>
-            <span className="text-xs text-slate-200 border border-slate-500 bg-slate-700/60 rounded-full px-3 py-1">Voyage AI embeddings</span>
-            <span className="text-xs text-slate-200 border border-slate-500 bg-slate-700/60 rounded-full px-3 py-1">LangChain + GPT-5.5</span>
+            <span className="text-xs text-slate-600 border border-slate-300 bg-white rounded-full px-3 py-1">MongoDB Atlas M0</span>
+            <span className="text-xs text-slate-600 border border-slate-300 bg-white rounded-full px-3 py-1">FastAPI + Motor (async Python)</span>
+            <span className="text-xs text-slate-600 border border-slate-300 bg-white rounded-full px-3 py-1">Next.js + SSE</span>
+            <span className="text-xs text-slate-600 border border-slate-300 bg-white rounded-full px-3 py-1">Voyage AI embeddings</span>
+            <span className="text-xs text-slate-600 border border-slate-300 bg-white rounded-full px-3 py-1">LangChain + GPT-5.5</span>
           </div>
         </div>
+
+        {/* 0. Why this exists */}
+        <WhyItExistsSection />
 
         {/* 1. System flow */}
         <section>
@@ -633,6 +849,9 @@ export default function ArchitecturePage() {
           <ArchFlowDiagram />
         </section>
 
+        {/* 1b. Collections reference */}
+        <CollectionsTable />
+
         {/* 2. Document model */}
         <section>
           <SectionHeader
@@ -640,9 +859,9 @@ export default function ArchitecturePage() {
             subtitle="The core trade-off: embed component results inside the parent document instead of normalizing into a child table"
           />
           <DocumentModelPanel />
-          <div className="mt-3 bg-slate-800 border border-slate-600 rounded-lg px-4 py-3 text-sm text-slate-200 leading-relaxed">
-            <strong className="text-white">Why this matters:</strong> Every time the fleet page loads a device's test history, it reads one document per run — no JOIN, no N+1 query problem.
-            The 16×16 core health grid renders from a single <span className="font-mono text-emerald-300">find()</span> result.
+          <div className="mt-3 bg-white border border-slate-200 rounded-lg px-4 py-3 text-sm text-slate-700 leading-relaxed shadow-sm">
+            <strong className="text-slate-900">Why this matters:</strong> Every time the fleet page loads a device&apos;s test history, it reads one document per run — no JOIN, no N+1 query problem.
+            The core health grid renders from a single <span className="font-mono text-emerald-700">find()</span> result.
             In SQL this would require a JOIN across two tables on every page load, multiplied by 20 devices.
           </div>
         </section>
@@ -666,6 +885,9 @@ export default function ArchitecturePage() {
           />
           <BenefitsGrid />
         </section>
+
+        {/* 6. Alternative stacks */}
+        <AlternativeStacksSection />
 
       </main>
     </div>

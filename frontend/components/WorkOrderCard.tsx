@@ -29,37 +29,44 @@ export default function WorkOrderCard({ wo, deviceInfo }: { wo: WorkOrder; devic
   const meta = PRIORITY_META[wo.priority] ?? PRIORITY_META.P2;
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
-      {/* Header */}
-      <div className="px-5 pt-5 pb-3">
-        <div className="flex items-start justify-between gap-2 mb-2">
-          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Work Order</p>
+    <div className="rounded-lg border border-slate-200 bg-white overflow-hidden">
+      {/* Dispatch header — location first, like a physical ticket */}
+      <div className={`px-5 py-3 border-b border-slate-100 ${meta.bg} border`}>
+        <div className="flex items-center justify-between gap-2">
+          <div>
+            {deviceInfo?.location ? (
+              <>
+                <p className="text-xs font-bold text-slate-700 font-mono">
+                  {[deviceInfo.location.datacenter, deviceInfo.location.rack,
+                    deviceInfo.location.slot ? `Slot ${deviceInfo.location.slot}` : null]
+                    .filter(Boolean).join(" › ")}
+                </p>
+                {deviceInfo.hardware?.model && (
+                  <p className="text-[11px] text-slate-500 mt-0.5">{deviceInfo.hardware.model}</p>
+                )}
+              </>
+            ) : (
+              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Work Order</p>
+            )}
+          </div>
           <span className={`flex items-center gap-1.5 text-xs font-semibold ${meta.text} shrink-0`}>
             <span className={`w-2 h-2 rounded-full ${meta.dot} inline-block`} />
             {meta.label}
           </span>
         </div>
+      </div>
+
+      {/* Title + technician */}
+      <div className="px-5 pt-4 pb-3">
         <p className="text-sm font-semibold text-slate-800 leading-snug">{wo.title}</p>
         <p className="text-xs text-slate-500 mt-1">→ {wo.assigned_technician}</p>
       </div>
 
-      {/* Affected hardware context */}
-      {deviceInfo?.location && (
-        <div className="mx-5 mb-4 px-3 py-2 rounded-lg bg-slate-50 border border-slate-200">
-          <p className="text-xs text-slate-600">
-            <span className="font-semibold text-slate-700">Affected hardware: </span>
-            {[deviceInfo.location.datacenter, deviceInfo.location.rack, deviceInfo.location.slot]
-              .filter(Boolean).join(" › ")}
-            {deviceInfo.hardware?.model && <span className="text-slate-400 ml-1">({deviceInfo.hardware.model})</span>}
-          </p>
-        </div>
-      )}
-
       {/* Historical basis */}
       {wo.historical_basis && (
-        <div className="mx-5 mb-4 px-3 py-2 rounded-lg bg-blue-50 border border-blue-100">
-          <p className="text-xs text-blue-700 leading-relaxed">
-            <span className="font-semibold">Historical basis: </span>
+        <div className="mx-5 mb-4 px-3 py-2 rounded bg-slate-50 border border-slate-200">
+          <p className="text-xs text-slate-600 leading-relaxed">
+            <span className="font-semibold text-slate-700">Based on: </span>
             {wo.historical_basis}
           </p>
         </div>

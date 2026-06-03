@@ -1,0 +1,64 @@
+---
+description: "Visual theme and UX design language for PulseBMC. Apply to all frontend components, pages, and UI copy. Enforces the ops-dashboard aesthetic appropriate for Aaron Jin (hardware SA, SQL-fluent, visual learner)."
+globs: frontend/**/*.{tsx,ts,css}
+alwaysApply: false
+---
+
+# UI Theme — PulseBMC
+
+## What this is
+
+This is a **diagnostic reasoning system for a hardware operator**, not a consumer app or a marketing site. Every design decision should reinforce that framing. Operators are reading this under pressure; density and clarity beat whitespace and friendliness.
+
+## Color discipline
+
+- **Status only:** Red/amber/green are reserved for device health, test outcomes, and alert severity. Never use them decoratively.
+- **Neutral by default:** Background, borders, text, and non-status UI elements use slate/zinc/gray Tailwind tokens.
+- **Accent sparingly:** One accent color (blue) for interactive elements (buttons, active states, links). Not on every heading.
+- **No rainbow status codes.** If you have more than three status states, they map to the same three colors with text labels differentiating.
+
+## Typography and density
+
+- **Hardware operators read dense dashboards.** Text size `text-sm` is the baseline for data fields; `text-xs` for metadata and labels. Do not balloon font sizes for visual comfort.
+- **Monospace for identifiers.** Device IDs, error codes, component IDs, and timestamps use `font-mono`. These are hardware names, not marketing copy.
+- **No marketing language.** No "Get started", "Welcome to PulseBMC", "Everything you need to monitor your fleet". Labels are operational: "Fleet status", "Last test run", "Open alerts".
+
+## SQL bridging (mandatory)
+
+Every MongoDB concept surfaced in the UI must be anchored to a SQL equivalent within visual proximity. Non-negotiable examples:
+
+- `Collection` → annotate as "≈ SQL table" in ConceptBar or tooltip
+- Pipeline stages shown in QueryTooltip → include SQL equivalent comment above each stage
+- `$match` → label as `WHERE` in tooltips; `$group` → `GROUP BY`; `$lookup` → `LEFT JOIN`
+- Document viewer panels → field labels use `(embedded array — replaces JOIN)` annotations
+
+If a MongoDB term appears in the UI without a SQL annotation, that is a bug.
+
+## LED and status indicators
+
+- LED dots must be large enough to read from 1.5m away (minimum `w-3 h-3`, prefer `w-4 h-4` on fleet grid).
+- Animate only on active failure: pulse animation on red/amber LEDs. Green is static.
+- Always pair color with a text label. Color-only status is inaccessible and misread by colorblind operators.
+
+## AI agent output rules
+
+- `RootCauseCard`: hypothesis headline → confidence bar (visual, not just a number) → evidence list → next steps. Never dump raw JSON as the default view.
+- `WorkOrderCard`: priority badge (P1 red / P2 amber / P3 blue / P4 gray) → title → ordered repair steps → safety callouts in amber. Always show the `historical_basis` line — this is the RAG payoff moment.
+- Raw JSON behind an expand toggle only. Label the toggle "View raw document" not "JSON".
+
+## MongoDB pitch moments — make them visible
+
+These are the demo talking points that must be visually distinct, not buried in prose:
+
+1. **Vector search result** — when similar past failures are retrieved, show similarity score as a visual bar and label the section "Found via Atlas Vector Search — semantic similarity, not keyword match".
+2. **Flexible schema** — when showing alert evidence that differs by failure type, label it "MongoDB flexible document — field set varies by failure type. SQL would require nullable columns or EAV table."
+3. **`$facet` multi-aggregation** — when the explore page runs facets, show "5 aggregations · 1 round-trip" as a badge on the result.
+4. **SSE real-time** — the live pulse label on the device detail page should note "MongoDB Change Stream → SSE" not just "Live".
+
+## Anti-patterns — do not build these
+
+- **Empty states with illustrations.** If there are no alerts, show "No open alerts" in text. No art.
+- **Onboarding flows.** This is a demo system; operators arrive knowing the context.
+- **Skeleton loaders for fast queries.** Atlas queries on this dataset are fast (<100ms). Show a minimal spinner or nothing; skeleton screens imply slowness.
+- **Pagination on small datasets.** 20 devices and ~100 recent runs fit on one page. No pagination UI.
+- **Tabs that hide critical data.** If a hardware operator needs to click a tab to find an alert, the layout is wrong.

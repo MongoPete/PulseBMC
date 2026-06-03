@@ -4,8 +4,8 @@ import Link from "next/link";
 import LiveClock from "@/components/LiveClock";
 
 export const metadata: Metadata = {
-  title: "PulseBMC — Hardware Health Dashboard",
-  description: "BMC fleet health monitoring powered by MongoDB Atlas",
+  title: "PulseBMC — BMC Fleet Health",
+  description: "BMC fleet health monitoring — loopback diagnostics and root cause analysis",
 };
 
 function SiemensLogo() {
@@ -62,8 +62,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 <Link id="explore-nav" href="/explore" className="text-slate-500 hover:text-slate-900 transition-colors">
                   Explorer
                 </Link>
-                <Link href="/architecture" className="text-slate-500 hover:text-slate-900 transition-colors flex items-center gap-1">
-                  <span style={{ color: "#009999" }} className="text-[10px]">◈</span> How It Works
+                <Link href="/architecture" className="text-slate-500 hover:text-slate-900 transition-colors">
+                  How It Works
                 </Link>
               </div>
             </div>

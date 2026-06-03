@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { SSE_URL, api } from "@/lib/api";
+import { trackedEventSource, trackedInterval } from "@/lib/runtimeDebug";
 
 interface FeedEvent {
   id: number;
@@ -55,8 +56,8 @@ export default function LiveFeed() {
   // Load initial simulator state, then keep it fresh
   useEffect(() => {
     syncState();
-    const id = setInterval(syncState, 5000);
-    return () => clearInterval(id);
+    const i = trackedInterval(syncState, 5000);
+    return () => i.clear();
   }, []);
 
   const control = async (action: "start" | "stop" | "restart") => {
@@ -72,7 +73,7 @@ export default function LiveFeed() {
   };
 
   useEffect(() => {
-    const es = new EventSource(SSE_URL);
+    const { es, close } = trackedEventSource(SSE_URL);
 
     es.onopen = () => setConnected(true);
     es.onerror = () => setConnected(false);
@@ -101,7 +102,7 @@ export default function LiveFeed() {
       });
     };
 
-    return () => es.close();
+    return () => close();
   }, []);
 
   // Auto-scroll to bottom on new events

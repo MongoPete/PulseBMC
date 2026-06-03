@@ -1,9 +1,10 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 
 interface Props {
   onAction?: () => void;
+  onSimulatorStateChange?: (running: boolean) => void;
 }
 
 type ScenarioId = "burst" | "trending" | "offline" | "reset";
@@ -59,9 +60,32 @@ const ACTIONS: Record<ScenarioId, () => Promise<unknown>> = {
   reset: () => api.demo.reset(),
 };
 
-export default function DemoControls({ onAction }: Props) {
+export default function DemoControls({ onAction, onSimulatorStateChange }: Props) {
   const [loading, setLoading] = useState<ScenarioId | null>(null);
   const [lastRun, setLastRun] = useState<{ id: ScenarioId; ok: boolean; msg: string } | null>(null);
+  const [simRunning, setSimRunning] = useState<boolean | null>(null);
+  const [simLoading, setSimLoading] = useState(false);
+
+  useEffect(() => {
+    api.demo.state().then((s) => {
+      setSimRunning(s.simulator_running);
+      onSimulatorStateChange?.(s.simulator_running);
+    }).catch(() => {});
+  }, [onSimulatorStateChange]);
+
+  const toggleSimulator = async () => {
+    if (simRunning === null) return;
+    setSimLoading(true);
+    try {
+      const action = simRunning ? "stop" : "start";
+      const res = await api.demo.simulator(action);
+      setSimRunning(res.running);
+      onSimulatorStateChange?.(res.running);
+      onAction?.();
+    } catch { /* ignore */ } finally {
+      setSimLoading(false);
+    }
+  };
 
   const run = async (scenario: Scenario) => {
     setLoading(scenario.id);
@@ -79,6 +103,38 @@ export default function DemoControls({ onAction }: Props) {
 
   return (
     <div id="demo-controls" className="pt-3">
+      {/* Simulator status + pause/resume */}
+      <div className="flex items-center justify-between mb-3 pb-3 border-b border-slate-100">
+        <div className="flex items-center gap-2 text-xs">
+          <span className={`w-2 h-2 rounded-full ${
+            simRunning === null ? "bg-slate-300" :
+            simRunning ? "bg-green-500 animate-pulse" : "bg-slate-300"
+          }`} />
+          <span className="text-slate-500">
+            Simulator:{" "}
+            <span className={simRunning ? "text-green-600 font-medium" : "text-slate-400"}>
+              {simRunning === null ? "…" : simRunning ? "running" : "paused"}
+            </span>
+          </span>
+        </div>
+        <button
+          onClick={toggleSimulator}
+          disabled={simLoading || simRunning === null}
+          className={`text-xs px-3 py-1.5 rounded border font-medium transition-colors disabled:opacity-40 ${
+            simRunning
+              ? "border-amber-300 text-amber-700 hover:bg-amber-50"
+              : "border-green-300 text-green-700 hover:bg-green-50"
+          }`}
+        >
+          {simLoading ? (
+            <span className="flex items-center gap-1.5">
+              <span className="w-2.5 h-2.5 border border-current border-t-transparent rounded-full animate-spin" />
+              {simRunning ? "Pausing…" : "Resuming…"}
+            </span>
+          ) : simRunning ? "Pause Simulator" : "Resume Simulator"}
+        </button>
+      </div>
+
       <p className="text-xs text-slate-500 mb-3">
         Each scenario writes directly to Atlas — no terminal commands needed.
       </p>

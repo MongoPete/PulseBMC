@@ -16,6 +16,14 @@ class Hardware(BaseModel):
     storage_types: list[str] = ["eMMC"]
 
 
+class LatchedFailure(BaseModel):
+    component_id: str
+    core_id: str
+    error_code: Optional[str] = None
+    run_id: Optional[str] = None
+    latched_at: datetime = Field(default_factory=datetime.utcnow)
+
+
 class Device(BaseModel):
     device_id: str
     hostname: str
@@ -24,6 +32,7 @@ class Device(BaseModel):
     status: str = "online"  # online | offline | maintenance
     registered_at: datetime = Field(default_factory=datetime.utcnow)
     last_seen: datetime = Field(default_factory=datetime.utcnow)
+    latched_failures: list[LatchedFailure] = []
 
 
 class DeviceCreate(BaseModel):
@@ -32,3 +41,15 @@ class DeviceCreate(BaseModel):
     location: Location
     hardware: Hardware
     status: str = "online"
+
+
+class LatchRequest(BaseModel):
+    component_id: str
+    core_id: str
+    error_code: Optional[str] = None
+    run_id: Optional[str] = None
+
+
+class ClearLatchRequest(BaseModel):
+    component_id: str
+    core_id: str

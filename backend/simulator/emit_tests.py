@@ -326,6 +326,22 @@ def main():
                 except httpx.ConnectError:
                     print(f"  {label} [backend unavailable]")
 
+                # Emit thermal telemetry reading — the pre-warming signal that
+                # rises before the LED changes. Stored in the time-series collection.
+                try:
+                    client.post("/api/telemetry", json={
+                        "ts": run["started_at"],
+                        "meta": {"device_id": device_id, "sensor_type": "thermal"},
+                        "readings": {
+                            "baseline_temp_c": round(_device_temp_baseline.get(device_id, 50.0), 1),
+                            "in_degradation": _degradation_phase.get(device_id, 0) > 0,
+                            "degradation_phase_remaining": _degradation_phase.get(device_id, 0),
+                            "led_state": run["led_state"],
+                        },
+                    }, timeout=3)
+                except Exception:
+                    pass  # Telemetry emission is non-critical
+
             elapsed = time.time() - cycle_start
             time.sleep(max(0, interval - elapsed))
 

@@ -2,8 +2,8 @@
 Natural Language Explorer — Aaron types a question, gets data + the MongoDB
 query that produced it + a SQL equivalent, so he can build intuition.
 """
-import os
 import time
+from datetime import datetime, timedelta
 from fastapi import APIRouter
 from pydantic import BaseModel
 from langchain_core.prompts import ChatPromptTemplate
@@ -38,6 +38,66 @@ Return ONLY valid JSON. No explanation outside the JSON."""
 
 class ExploreRequest(BaseModel):
     question: str
+
+
+@router.get("/explore/facets")
+async def explore_facets():
+    """
+    Returns live Atlas statistics using a single $facet aggregation per collection.
+    Demonstrates MongoDB's ability to run multiple aggregations in one round-trip.
+    """
+    db = get_db()
+    since_24h = (datetime.utcnow() - timedelta(hours=24)).isoformat()
+    since_7d = (datetime.utcnow() - timedelta(days=7)).isoformat()
+
+    # $facet: 5 aggregations in 1 query against test_runs
+    pipeline = [
+        {"$facet": {
+            "recent_fails_24h": [
+                {"$match": {"status": "fail", "started_at": {"$gte": since_24h}}},
+                {"$count": "n"},
+            ],
+            "failure_modes_7d": [
+                {"$match": {"status": "fail", "started_at": {"$gte": since_7d}, "failure_mode": {"$ne": None}}},
+                {"$group": {"_id": "$failure_mode", "count": {"$sum": 1}}},
+                {"$sort": {"count": -1}},
+            ],
+            "top_failing_devices_24h": [
+                {"$match": {"status": "fail", "started_at": {"$gte": since_24h}}},
+                {"$group": {"_id": "$device_id", "count": {"$sum": 1}}},
+                {"$sort": {"count": -1}},
+                {"$limit": 5},
+            ],
+            "pass_vs_fail_24h": [
+                {"$match": {"started_at": {"$gte": since_24h}}},
+                {"$group": {"_id": "$status", "count": {"$sum": 1}}},
+            ],
+        }},
+    ]
+
+    facet_result = await db.test_runs.aggregate(pipeline).next()
+
+    device_total = await db.devices.count_documents({})
+    device_degrading = await db.devices.count_documents({"status": "degrading"})
+    open_alerts = await db.alerts.count_documents({"status": "open"})
+
+    recent_fails = facet_result["recent_fails_24h"][0]["n"] if facet_result["recent_fails_24h"] else 0
+    failure_modes = [{"mode": d["_id"] or "unknown", "count": d["count"]} for d in facet_result["failure_modes_7d"]]
+    top_devices = [{"device_id": d["_id"], "count": d["count"]} for d in facet_result["top_failing_devices_24h"]]
+    pvf = {d["_id"]: d["count"] for d in facet_result["pass_vs_fail_24h"]}
+
+    return {
+        "devices": {"total": device_total, "degrading": device_degrading},
+        "alerts": {"open": open_alerts},
+        "recent_fails_24h": recent_fails,
+        "pass_24h": pvf.get("pass", 0),
+        "fail_24h": pvf.get("fail", 0),
+        "failure_modes_7d": failure_modes,
+        "top_failing_devices_24h": top_devices,
+        "meta": {
+            "mongodb_note": "$facet ran 4 aggregation branches in 1 round-trip against test_runs",
+        },
+    }
 
 
 @router.post("/explore/query")

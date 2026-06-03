@@ -1,4 +1,5 @@
 "use client";
+import TypewriterText from "./TypewriterText";
 
 interface RootCause {
   alert_id: string;
@@ -10,7 +11,7 @@ interface RootCause {
   retrieved_context_summary: string;
 }
 
-export default function RootCauseCard({ rca }: { rca: RootCause }) {
+export default function RootCauseCard({ rca, animate }: { rca: RootCause; animate?: boolean }) {
   const confidencePct = Math.round(rca.confidence * 100);
   const confidenceColor =
     confidencePct >= 70 ? "bg-green-500" :
@@ -20,7 +21,7 @@ export default function RootCauseCard({ rca }: { rca: RootCause }) {
     confidencePct >= 40 ? "text-amber-700" : "text-red-700";
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
+    <div className="rounded-lg border border-slate-200 bg-white overflow-hidden">
       {/* Header */}
       <div className="px-5 pt-5 pb-3">
         <div className="flex items-start justify-between gap-2 mb-3">
@@ -30,7 +31,9 @@ export default function RootCauseCard({ rca }: { rca: RootCause }) {
             <span className="text-xs text-slate-400">confidence</span>
           </div>
         </div>
-        <p className="text-sm text-slate-800 leading-relaxed">{rca.root_cause_hypothesis}</p>
+        <p className="text-sm text-slate-800 leading-relaxed">
+          <TypewriterText text={rca.root_cause_hypothesis} animate={!!animate} />
+        </p>
       </div>
 
       {/* Confidence bar */}
@@ -45,9 +48,9 @@ export default function RootCauseCard({ rca }: { rca: RootCause }) {
 
       {/* Retrieved context */}
       {rca.retrieved_context_summary && (
-        <div className="mx-5 mb-4 px-3 py-2.5 rounded-lg bg-blue-50 border border-blue-100">
-          <p className="text-xs text-blue-700 leading-relaxed">
-            <span className="font-semibold">Vector context: </span>
+        <div className="mx-5 mb-4 px-3 py-2.5 rounded bg-slate-50 border border-slate-200">
+          <p className="text-xs text-slate-600 leading-relaxed">
+            <span className="font-semibold text-slate-700">Similar past failures: </span>
             {rca.retrieved_context_summary}
           </p>
         </div>

@@ -21,6 +21,23 @@ def get_db():
 async def ensure_indexes():
     db = get_db()
 
+    # telemetry — native time-series collection (timeField/metaField/granularity)
+    # Must be created before indexing. Silently skipped if it already exists.
+    try:
+        await db.create_collection(
+            "telemetry",
+            timeseries={
+                "timeField": "ts",
+                "metaField": "meta",
+                "granularity": "seconds",
+            },
+        )
+    except Exception:
+        pass  # Collection already exists
+
+    # Secondary index: fast per-device latest-readings queries
+    await db.telemetry.create_index([("meta.device_id", ASCENDING), ("ts", DESCENDING)])
+
     # test_runs — compound indexes for high-write-throughput hot path
     await db.test_runs.create_index([("device_id", ASCENDING), ("started_at", DESCENDING)])
     await db.test_runs.create_index([("status", ASCENDING), ("started_at", DESCENDING)])

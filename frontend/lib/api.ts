@@ -27,6 +27,7 @@ export const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ question }),
     }),
+  exploreFacets: () => apiFetch("/api/explore/facets"),
   demo: {
     burstFailure: (deviceId = "device-015") =>
       apiFetch(`/api/demo/burst-failure?device_id=${deviceId}`, { method: "POST" }),
@@ -48,8 +49,22 @@ export const api = {
     setFailureMode: (deviceId: string, mode: string) =>
       apiFetch(`/api/demo/set-failure-mode?device_id=${deviceId}&mode=${mode}`, { method: "POST" }),
   },
+  telemetry: (deviceId: string, limit = 60) =>
+    apiFetch(`/api/telemetry/${deviceId}?limit=${limit}`),
   isolateDevice: (id: string, status: "online" | "offline" | "maintenance") =>
     apiFetch(`/api/devices/${id}/status?status=${status}`, { method: "PATCH" }),
+  latchCore: (deviceId: string, componentId: string, coreId: string, errorCode?: string, runId?: string) =>
+    apiFetch(`/api/devices/${deviceId}/latch`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ component_id: componentId, core_id: coreId, error_code: errorCode ?? null, run_id: runId ?? null }),
+    }),
+  clearLatch: (deviceId: string, componentId: string, coreId: string) =>
+    apiFetch(`/api/devices/${deviceId}/latch/clear`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ component_id: componentId, core_id: coreId }),
+    }),
 };
 
 export const SSE_URL = `${API}/api/test-runs/stream`;

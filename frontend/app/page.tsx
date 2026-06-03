@@ -2,10 +2,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import DeviceGrid from "@/components/DeviceGrid";
 import DemoControls from "@/components/DemoControls";
+import RuntimeDebugPanel from "@/components/RuntimeDebugPanel";
 import type { LedState } from "@/components/LedIndicator";
 import LedIndicator from "@/components/LedIndicator";
 import { api, SSE_URL } from "@/lib/api";
 import { fmtRelative } from "@/lib/time";
+import { trackedEventSource, trackedInterval, trackedTimeout } from "@/lib/runtimeDebug";
 
 interface Device {
   device_id: string;
@@ -14,16 +16,26 @@ interface Device {
   location?: { datacenter?: string; rack?: string; slot?: string };
 }
 
+interface DrawerComponent {
+  component_id: string;
+  result: string;
+  error_code?: string;
+  core_results?: Array<{ core_id: string; result: string; temp_c?: number; latency_ms?: number }>;
+}
+
+interface DrawerRun {
+  id: string;
+  started_at: string;
+  status: string;
+  led_state: LedState;
+  duration_ms: number;
+  failure_mode?: string;
+  results?: { components?: DrawerComponent[] };
+}
+
 interface DrawerData {
   device: Device | null;
-  runs: Array<{
-    id: string;
-    started_at: string;
-    status: string;
-    led_state: LedState;
-    duration_ms: number;
-    results?: { components?: Array<{ component_id: string; result: string; error_code?: string }> };
-  }>;
+  runs: DrawerRun[];
   loading: boolean;
 }
 
@@ -47,27 +59,23 @@ function DeviceDrawer({
   const components = latestRun?.results?.components ?? [];
   const failingComponents = components.filter((c) => c.result === "fail");
 
-  // Simple 4×4 mini core grid (at most 4 components × 4 cores)
-  const miniGrid = components.slice(0, 4).map((comp) =>
-    [comp.result === "fail", comp.result === "fail", comp.result === "fail", comp.result === "fail"]
-  );
+  const [expandedCompId, setExpandedCompId] = useState<string | null>(null);
+  const [expandedRunId, setExpandedRunId] = useState<string | null>(null);
 
   return (
     <>
       {/* Backdrop */}
-      <div
-        className="fixed inset-0 z-30 bg-black/15 backdrop-blur-[1px]"
-        onClick={onClose}
-      />
+      <div className="fixed inset-0 z-30 bg-black/10" onClick={onClose} />
+
       {/* Drawer */}
       <aside
-        className="fixed right-0 top-12 bottom-0 z-40 w-96 bg-white border-l shadow-xl flex flex-col"
+        className="fixed right-0 top-12 bottom-0 z-40 w-96 bg-white border-l shadow-md flex flex-col"
         style={{ borderColor: "#e2e8f0" }}
       >
         {/* Header */}
         <div className="flex items-start justify-between px-5 py-4 border-b" style={{ borderColor: "#e2e8f0" }}>
           <div className="flex items-start gap-3">
-            <LedIndicator state={ledState} size="lg" />
+            <LedIndicator state={ledState} size="md" />
             <div>
               <p className="font-semibold text-slate-800 text-base">{deviceId}</p>
               {device && (
@@ -84,10 +92,7 @@ function DeviceDrawer({
               )}
             </div>
           </div>
-          <button
-            onClick={onClose}
-            className="text-slate-400 hover:text-slate-700 text-xl leading-none mt-0.5"
-          >
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-700 text-xl leading-none mt-0.5">
             ×
           </button>
         </div>
@@ -97,11 +102,12 @@ function DeviceDrawer({
             <div className="p-5 text-sm text-slate-400">Loading…</div>
           ) : (
             <>
-              {/* Mini core health grid */}
+              {/* Component Health — expandable rows */}
               {components.length > 0 && (
                 <div className="px-5 py-4 border-b" style={{ borderColor: "#f1f5f9" }}>
-                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">
+                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
                     Component Health
+                    <span className="ml-1 font-normal normal-case text-slate-400">(click to inspect)</span>
                   </p>
                   {failingComponents.length > 0 && (
                     <div className="mb-2 px-2.5 py-1.5 rounded bg-red-50 border border-red-200 text-xs text-red-700">
@@ -109,35 +115,132 @@ function DeviceDrawer({
                     </div>
                   )}
                   <div className="space-y-1">
-                    {components.map((comp) => (
-                      <div key={comp.component_id} className="flex items-center gap-2">
-                        <span className={`w-2.5 h-2.5 rounded-sm shrink-0 ${comp.result === "fail" ? "bg-red-500" : "bg-green-400"}`} />
-                        <span className="text-xs font-mono text-slate-600 flex-1 truncate">{comp.component_id}</span>
-                        <span className={`text-[10px] font-medium ${comp.result === "fail" ? "text-red-600" : "text-green-600"}`}>
-                          {comp.result.toUpperCase()}
-                        </span>
-                      </div>
-                    ))}
+                    {components.map((comp) => {
+                      const isOpen = expandedCompId === comp.component_id;
+                      const isFail = comp.result === "fail";
+                      return (
+                        <div key={comp.component_id}>
+                          <button
+                            onClick={() => setExpandedCompId(isOpen ? null : comp.component_id)}
+                            className={`w-full flex items-center gap-2 text-left rounded px-2 py-1.5 transition-colors ${
+                              isOpen ? "bg-slate-100" : "hover:bg-slate-50"
+                            }`}
+                          >
+                            <span className={`w-2.5 h-2.5 rounded-sm shrink-0 ${isFail ? "bg-red-500" : "bg-green-400"}`} />
+                            <span className="text-xs font-mono text-slate-700 flex-1">{comp.component_id}</span>
+                            {comp.error_code && isFail && (
+                              <span className="text-[10px] font-mono text-red-500 bg-red-50 px-1.5 py-0.5 rounded">{comp.error_code}</span>
+                            )}
+                            <span className={`text-[10px] font-semibold shrink-0 ${isFail ? "text-red-600" : "text-green-600"}`}>
+                              {comp.result.toUpperCase()}
+                            </span>
+                            <span className="text-slate-300 text-[10px]">{isOpen ? "▾" : "▸"}</span>
+                          </button>
+
+                          {isOpen && (
+                            <div className="ml-5 mt-1 mb-2 rounded border border-slate-200 bg-slate-50 px-3 py-2.5 space-y-1.5">
+                              {comp.core_results && comp.core_results.length > 0 ? (
+                                <>
+                                  <p className="text-[10px] text-slate-400 uppercase tracking-wide font-semibold mb-1.5">Cores</p>
+                                  <div className="flex gap-1.5 flex-wrap">
+                                    {comp.core_results.map((core) => (
+                                      <div
+                                        key={core.core_id}
+                                        title={`${core.core_id} · ${core.result}${core.temp_c != null ? ` · ${core.temp_c}°C` : ""}`}
+                                        className={`w-7 h-7 rounded border text-[9px] font-mono flex items-center justify-center font-bold ${
+                                          core.result === "fail"
+                                            ? "bg-red-50 border-red-300 text-red-600"
+                                            : "bg-white border-slate-200 text-slate-400"
+                                        }`}
+                                      >
+                                        {core.core_id.replace("core_", "")}
+                                      </div>
+                                    ))}
+                                  </div>
+                                  {comp.core_results.some((c) => c.temp_c != null) && (
+                                    <div className="flex gap-3 pt-1 text-[10px] text-slate-500 font-mono flex-wrap">
+                                      {comp.core_results.filter((c) => c.temp_c != null).map((c) => (
+                                        <span key={c.core_id} className={c.temp_c! > 70 ? "text-amber-600" : ""}>
+                                          {c.core_id.replace("core_", "C")}: {c.temp_c}°
+                                        </span>
+                                      ))}
+                                    </div>
+                                  )}
+                                </>
+                              ) : (
+                                <p className="text-[10px] text-slate-400">
+                                  {isFail
+                                    ? <>Status: <span className="text-red-600 font-semibold">FAIL</span>{comp.error_code && <span className="ml-1 font-mono text-red-500">{comp.error_code}</span>}</>
+                                    : <span className="text-green-600 font-semibold">All cores passed</span>
+                                  }
+                                </p>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               )}
 
-              {/* Recent runs */}
+              {/* Recent runs — expandable to show component breakdown */}
               <div className="px-5 py-4 border-b" style={{ borderColor: "#f1f5f9" }}>
-                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">
+                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
                   Recent Tests
+                  <span className="ml-1 font-normal normal-case text-slate-400">(click for breakdown)</span>
                 </p>
                 <div className="space-y-1">
-                  {runs.slice(0, 6).map((run) => (
-                    <div key={run.id} className="flex items-center gap-2 text-xs">
-                      <LedIndicator state={run.led_state} size="sm" />
-                      <span className={`w-8 font-medium shrink-0 ${run.status === "fail" ? "text-red-600" : "text-green-600"}`}>
-                        {run.status.toUpperCase()}
-                      </span>
-                      <span className="text-slate-400 flex-1">{fmtRelative(run.started_at)}</span>
-                      <span className="text-slate-400 font-mono">{run.duration_ms}ms</span>
-                    </div>
-                  ))}
+                  {runs.slice(0, 8).map((run) => {
+                    const isOpen = expandedRunId === run.id;
+                    const runComponents = run.results?.components ?? [];
+                    return (
+                      <div key={run.id}>
+                        <button
+                          onClick={() => setExpandedRunId(isOpen ? null : run.id)}
+                          className={`w-full flex items-center gap-2 text-xs text-left rounded px-2 py-1.5 transition-colors ${
+                            isOpen ? "bg-slate-100" : "hover:bg-slate-50"
+                          }`}
+                        >
+                          <LedIndicator state={run.led_state} size="sm" />
+                          <span className={`w-8 font-semibold shrink-0 ${run.status === "fail" ? "text-red-600" : "text-green-600"}`}>
+                            {run.status.toUpperCase()}
+                          </span>
+                          <span className="text-slate-400 flex-1" title={run.started_at ?? ""}>{fmtRelative(run.started_at)}</span>
+                          {run.failure_mode && run.failure_mode !== "none" && (
+                            <span className="text-[10px] text-amber-500 capitalize">{run.failure_mode}</span>
+                          )}
+                          {run.duration_ms != null && (
+                            <span className="text-slate-400 font-mono">{run.duration_ms}ms</span>
+                          )}
+                          <span className="text-slate-300 text-[10px]">{isOpen ? "▾" : "▸"}</span>
+                        </button>
+
+                        {isOpen && (
+                          <div className="ml-4 mt-1 mb-2 rounded border border-slate-200 bg-slate-50 px-3 py-2">
+                            {runComponents.length > 0 ? (
+                              <div className="space-y-1">
+                                {runComponents.map((c) => (
+                                  <div key={c.component_id} className="flex items-center gap-2 text-[11px]">
+                                    <span className={`w-2 h-2 rounded-sm shrink-0 ${c.result === "fail" ? "bg-red-500" : "bg-green-400"}`} />
+                                    <span className="font-mono text-slate-600 flex-1">{c.component_id}</span>
+                                    {c.error_code && c.result === "fail" && (
+                                      <span className="font-mono text-red-500 text-[10px]">{c.error_code}</span>
+                                    )}
+                                    <span className={`font-semibold ${c.result === "fail" ? "text-red-600" : "text-green-600"}`}>
+                                      {c.result.toUpperCase()}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <p className="text-[10px] text-slate-400">No component detail available.</p>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                   {runs.length === 0 && (
                     <p className="text-xs text-slate-400">No test runs recorded.</p>
                   )}
@@ -191,35 +294,58 @@ export default function FleetPage() {
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
   const [loading, setLoading] = useState(true);
   const [demoOpen, setDemoOpen] = useState(false);
+  const [simulatorRunning, setSimulatorRunning] = useState<boolean | null>(null);
+  const refreshInFlightRef = useRef(false);
 
   // Drawer state
   const [drawerDeviceId, setDrawerDeviceId] = useState<string | null>(null);
   const [drawerData, setDrawerData] = useState<DrawerData>({ device: null, runs: [], loading: false });
+  const reopenDrawerTimerRef = useRef<(() => void) | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (reopenDrawerTimerRef.current) reopenDrawerTimerRef.current();
+    };
+  }, []);
 
   const refreshAll = useCallback(async () => {
+    if (refreshInFlightRef.current) return;
+    refreshInFlightRef.current = true;
     try {
       const [devRes, stateRes] = await Promise.all([
         api.devices(),
         api.fleetStates(),
       ]);
       setDevices(devRes.data ?? []);
-      setLiveStates((prev) => ({ ...stateRes as Record<string, LedState>, ...prev }));
+      setLiveStates((prev) => ({ ...prev, ...stateRes as Record<string, LedState> }));
       setLastRefresh(new Date());
     } catch {
       /* silent */
     } finally {
       setLoading(false);
+      refreshInFlightRef.current = false;
     }
   }, []);
 
   useEffect(() => {
-    refreshAll();
-    const interval = setInterval(refreshAll, 5000);
-    return () => clearInterval(interval);
+    const initial = trackedTimeout(() => {
+      refreshAll();
+      api.demo.state()
+        .then((s) => setSimulatorRunning(s.simulator_running))
+        .catch(() => {});
+    }, 0);
+    return () => initial.clear();
   }, [refreshAll]);
 
   useEffect(() => {
-    const es = new EventSource(SSE_URL);
+    if (simulatorRunning !== true) return;
+    // SSE carries live LED changes; this is only a low-frequency reconciliation.
+    const i = trackedInterval(refreshAll, 60000);
+    return () => i.clear();
+  }, [refreshAll, simulatorRunning]);
+
+  useEffect(() => {
+    const { es, close } = trackedEventSource(SSE_URL);
     es.onmessage = (e) => {
       const payload = JSON.parse(e.data);
       if (payload.device_id && payload.led_state) {
@@ -229,7 +355,7 @@ export default function FleetPage() {
         }
       }
     };
-    return () => es.close();
+    return () => close();
   }, []);
 
   // Open drawer and fetch data for a device
@@ -257,7 +383,9 @@ export default function FleetPage() {
         await api.demo.rerun(deviceId);
         // Re-fetch drawer data after rerun
         if (drawerDeviceId === deviceId) {
-          setTimeout(() => openDrawer(deviceId), 1500);
+          if (reopenDrawerTimerRef.current) reopenDrawerTimerRef.current();
+          const t = trackedTimeout(() => openDrawer(deviceId), 1500);
+          reopenDrawerTimerRef.current = t.clear;
         }
       } catch { /* ignore */ }
     } else if (action === "isolate") {
@@ -293,6 +421,9 @@ export default function FleetPage() {
               )}
               {lastRefresh && (
                 <span className="text-slate-400 ml-1">· {lastRefresh.toLocaleTimeString()}</span>
+              )}
+              {simulatorRunning === false && (
+                <span className="text-slate-400 ml-1">· polling paused</span>
               )}
             </p>
           </div>
@@ -341,11 +472,24 @@ export default function FleetPage() {
           </button>
           {demoOpen && (
             <div className="border-t border-slate-200 bg-white px-4 pb-4">
-              <DemoControls onAction={refreshAll} />
+              <DemoControls
+                onAction={refreshAll}
+                onSimulatorStateChange={setSimulatorRunning}
+              />
             </div>
           )}
         </div>
       </main>
+      <RuntimeDebugPanel
+        title="Fleet Runtime"
+        metrics={{
+          devices: devices.length,
+          live_states: Object.keys(liveStates).length,
+          pulses: Object.keys(pulses).length,
+          drawer_open: drawerDeviceId ? 1 : 0,
+          simulator_running: simulatorRunning === null ? "unknown" : simulatorRunning ? 1 : 0,
+        }}
+      />
 
       {/* Device Drawer */}
       {drawerDeviceId && (

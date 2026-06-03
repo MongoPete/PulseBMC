@@ -5,8 +5,10 @@ import RootCauseCard from "@/components/RootCauseCard";
 import WorkOrderCard from "@/components/WorkOrderCard";
 import RetrievedContextPanel from "@/components/RetrievedContextPanel";
 import LedIndicator from "@/components/LedIndicator";
+import RuntimeDebugPanel from "@/components/RuntimeDebugPanel";
 import { api, SSE_URL } from "@/lib/api";
 import { fmtDateTime, fmtRelative } from "@/lib/time";
+import { trackedEventSource, trackedTimeout } from "@/lib/runtimeDebug";
 
 interface Alert {
   id: string;
@@ -87,28 +89,50 @@ export default function AlertsPage() {
   const [kb, setKb] = useState<KnowledgeBase | null>(null);
   const [kbOpen, setKbOpen] = useState(false);
   const [expandedResults, setExpandedResults] = useState<Set<string>>(new Set());
+  const [freshResultIds, setFreshResultIds] = useState<Set<string>>(new Set());
   const [lastCapture, setLastCapture] = useState<{ msg: string; ts: string } | null>(null);
   const [newAlertIds, setNewAlertIds] = useState<Set<string>>(new Set());
   const knownIds = useRef<Set<string>>(new Set());
   const lastRefreshAt = useRef<number>(0);
+  const devicesRef = useRef<Record<string, DeviceInfo>>({});
+  const highlightTimeouts = useRef<Map<number, () => void>>(new Map());
+  const highlightTimerSeq = useRef(0);
+  const deviceFetchInFlight = useRef<Set<string>>(new Set());
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    devicesRef.current = devices;
+  }, [devices]);
+
+  useEffect(() => {
+    return () => {
+      mountedRef.current = false;
+      highlightTimeouts.current.forEach((clear) => clear());
+      highlightTimeouts.current.clear();
+    };
+  }, []);
 
   const refresh = useCallback(async () => {
     const res = await api.alerts("open");
     const incoming: Alert[] = res.data ?? [];
     lastRefreshAt.current = Date.now();
+    const incomingIds = new Set(incoming.map((a) => a.id));
 
     const fresh = incoming.filter((a) => !knownIds.current.has(a.id)).map((a) => a.id);
     if (knownIds.current.size > 0 && fresh.length > 0) {
       setNewAlertIds((prev) => new Set([...prev, ...fresh]));
-      setTimeout(() => {
+      const timerId = ++highlightTimerSeq.current;
+      const t = trackedTimeout(() => {
         setNewAlertIds((prev) => {
           const next = new Set(prev);
           fresh.forEach((id) => next.delete(id));
           return next;
         });
+        highlightTimeouts.current.delete(timerId);
       }, 4000);
+      highlightTimeouts.current.set(timerId, t.clear);
     }
-    incoming.forEach((a) => knownIds.current.add(a.id));
+    knownIds.current = incomingIds;
 
     setAlerts((prev) => {
       const incomingMap = new Map(incoming.map((a) => [a.id, a]));
@@ -118,17 +142,36 @@ export default function AlertsPage() {
       return [...brandNew, ...updated];
     });
 
+    // Prune per-alert caches for closed alerts to prevent unbounded growth.
+    setResults((prev) =>
+      Object.fromEntries(Object.entries(prev).filter(([id]) => incomingIds.has(id)))
+    );
+    setAgentRuns((prev) =>
+      Object.fromEntries(Object.entries(prev).filter(([id]) => incomingIds.has(id)))
+    );
+    setExpandedResults((prev) => new Set([...prev].filter((id) => incomingIds.has(id))));
+    setFreshResultIds((prev) => new Set([...prev].filter((id) => incomingIds.has(id))));
+    setNewAlertIds((prev) => new Set([...prev].filter((id) => incomingIds.has(id))));
+
     setQueryInfo(res.query_info ?? null);
 
-    // Fetch device metadata for all alerts we don't have yet
-    const newDeviceIds = incoming.map((a) => a.device_id).filter((id) => !devices[id]);
-    newDeviceIds.forEach(async (id) => {
+    // Fetch device metadata for devices we have not fetched yet.
+    const candidateDeviceIds = Array.from(new Set(incoming.map((a) => a.device_id)));
+    candidateDeviceIds.forEach(async (deviceId) => {
+      if (deviceFetchInFlight.current.has(deviceId)) return;
+      if (devicesRef.current[deviceId]) return;
+      deviceFetchInFlight.current.add(deviceId);
       try {
-        const d = await api.device(id);
-        setDevices((prev) => ({ ...prev, [id]: d as DeviceInfo }));
-      } catch { /* ignore */ }
+        const d = await api.device(deviceId);
+        if (!mountedRef.current) return;
+        setDevices((prev) => (prev[deviceId] ? prev : { ...prev, [deviceId]: d as DeviceInfo }));
+      } catch {
+        /* ignore */
+      } finally {
+        deviceFetchInFlight.current.delete(deviceId);
+      }
     });
-  }, [devices]);
+  }, []);
 
   useEffect(() => {
     refresh();
@@ -136,7 +179,7 @@ export default function AlertsPage() {
   }, [refresh]);
 
   useEffect(() => {
-    const es = new EventSource(SSE_URL);
+    const { es, close } = trackedEventSource(SSE_URL);
     es.onmessage = (e) => {
       const payload = JSON.parse(e.data);
       if (payload.connected) return;
@@ -150,7 +193,7 @@ export default function AlertsPage() {
         setLastCapture({ msg: `Loopback captured on ${payload.device_id}`, ts });
       }
     };
-    return () => es.close();
+    return () => close();
   }, [refresh]);
 
   const runChain = async (alert: Alert, forceRefresh = false) => {
@@ -159,6 +202,10 @@ export default function AlertsPage() {
       const res = await api.agentChain(alert.id, alert.device_id, forceRefresh) as ChainResult;
       setResults((prev) => ({ ...prev, [alert.id]: res }));
       setExpandedResults((prev) => new Set([...prev, alert.id]));
+      // Mark as fresh only when newly generated (not a cache hit) so we animate it
+      if (!res.cached) {
+        setFreshResultIds((prev) => new Set([...prev, alert.id]));
+      }
       if (res.agent_run_id) {
         const run = await api.agentRun(res.agent_run_id);
         setAgentRuns((prev) => ({ ...prev, [alert.id]: run }));
@@ -198,7 +245,7 @@ export default function AlertsPage() {
           {lastCapture ? (
             <><span className="text-slate-400">{lastCapture.ts}</span> {lastCapture.msg}</>
           ) : (
-            "Listening for loopback captures from Atlas…"
+            "Monitoring for new failures"
           )}
         </span>
       </div>
@@ -227,99 +274,127 @@ export default function AlertsPage() {
                 ${isNew ? "ring-2 ring-offset-1 ring-teal-500" : ""}`}
             >
               {isNew && (
-                <div className="text-[11px] px-4 py-1 font-medium" style={{ background: "#e6f7f7", color: "#009999" }}>
-                  ● Just arrived — captured live from Atlas
+                <div className="text-[11px] px-4 py-1 font-medium border-b border-slate-100" style={{ color: "#009999" }}>
+                  New alert
                 </div>
               )}
 
-              {/* Alert header */}
+              {/* Alert card body */}
               <div className="p-4">
-                {/* Affected hardware context */}
-                {deviceInfo?.location && (
-                  <div className="mb-3 flex items-center gap-2 text-[11px] text-slate-500 bg-slate-50 border border-slate-100 rounded px-2.5 py-1.5">
-                    <span className="font-medium text-slate-700">Hardware:</span>
-                    <span className="font-mono">
-                      {[deviceInfo.location.datacenter, deviceInfo.location.rack, deviceInfo.location.slot]
-                        .filter(Boolean).join(" › ")}
-                    </span>
-                    {deviceInfo.hardware?.model && (
-                      <span className="text-slate-400">· {deviceInfo.hardware.model}</span>
-                    )}
-                  </div>
-                )}
 
-                <div className="flex items-start justify-between gap-4">
-                  <div className="flex items-start gap-3">
+                {/* Row 1: device identity + severity + timestamp */}
+                <div className="flex items-start justify-between gap-4 flex-wrap">
+                  <div className="flex items-center gap-3 min-w-0">
                     <LedIndicator state="red" size="md" />
-                    <div>
-                      <p className="text-sm font-semibold text-slate-800">{alert.device_id}</p>
-                      <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">{alert.summary}</p>
-                      <div className="flex items-center gap-3 mt-2 text-xs text-slate-500">
-                        <span className="font-mono font-medium text-red-600">{(alert.failure_rate * 100).toFixed(1)}% failure rate</span>
-                        <span title={fmtDateTime(alert.triggered_at)}>{fmtRelative(alert.triggered_at)}</span>
-                        <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-medium ${meta.badge}`}>{meta.label}</span>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2.5 flex-wrap">
+                        <span className="text-sm font-semibold text-slate-800">{alert.device_id}</span>
+                        <span className="font-mono text-xs font-medium text-red-600">{(alert.failure_rate * 100).toFixed(1)}% fail rate</span>
+                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${meta.badge}`}>{meta.label}</span>
+                        <span className="text-xs text-slate-400" title={fmtDateTime(alert.triggered_at)}>{fmtRelative(alert.triggered_at)}</span>
                       </div>
+                      {/* Physical location — second line */}
+                      {deviceInfo?.location && (
+                        <p className="text-[11px] text-slate-400 font-mono mt-0.5">
+                          {[deviceInfo.location.datacenter, deviceInfo.location.rack, deviceInfo.location.slot
+                            ? `Slot ${deviceInfo.location.slot}` : null]
+                            .filter(Boolean).join(" › ")}
+                          {deviceInfo.hardware?.model && <span className="text-slate-300"> · {deviceInfo.hardware.model}</span>}
+                        </p>
+                      )}
                     </div>
                   </div>
 
-                  <div className="shrink-0 flex flex-col items-end gap-1.5">
+                  {/* detect → analyze → isolate → act */}
+                  <div className="shrink-0 flex items-center gap-2 flex-wrap justify-end">
+                    {/* Step 1: Analyze (always available) */}
                     {!result ? (
                       <button
                         id={idx === 0 ? "run-ai-btn" : undefined}
                         onClick={() => runChain(alert)}
                         disabled={!!running}
-                        className="text-xs px-3.5 py-2 rounded-lg border font-medium transition-all disabled:opacity-40"
+                        className="text-xs px-3 py-1.5 rounded border font-medium transition-colors disabled:opacity-40"
                         style={{ borderColor: "#009999", color: "#009999" }}
                       >
                         {isRunning ? (
-                          <span className="flex items-center gap-2">
+                          <span className="flex items-center gap-1.5">
                             <span className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin" />
-                            Analysing…
+                            Running…
                           </span>
-                        ) : (
-                          "Run AI Analysis"
-                        )}
+                        ) : "Analyze"}
                       </button>
                     ) : (
-                      <div className="flex items-center gap-2">
-                        {result.cached && (
-                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 border border-slate-200 text-slate-500">
-                            Cached
-                          </span>
-                        )}
+                      <>
+                        {/* Step 3: Isolate — appears after analysis */}
+                        <button
+                          onClick={async () => {
+                            try { await api.isolateDevice(alert.device_id, "maintenance"); }
+                            catch { /* ignore */ }
+                          }}
+                          className="text-xs px-3 py-1.5 rounded border border-amber-300 text-amber-700 hover:bg-amber-50 transition-colors"
+                        >
+                          Isolate
+                        </button>
                         <button
                           onClick={() => setExpandedResults((prev) => {
                             const next = new Set(prev);
                             if (next.has(alert.id)) next.delete(alert.id); else next.add(alert.id);
                             return next;
                           })}
-                          className="text-[11px] text-slate-500 hover:text-slate-800 border border-slate-200 px-2.5 py-1 rounded transition-colors"
+                          className="text-xs text-slate-600 hover:text-slate-800 border border-slate-200 px-3 py-1.5 rounded transition-colors"
                         >
-                          {isExpanded ? "▾ Hide analysis" : "▸ Show analysis"}
+                          {isExpanded ? "Hide analysis" : "Show analysis"}
                         </button>
                         <button
                           onClick={() => runChain(alert, true)}
                           disabled={!!running}
-                          title="Re-run analysis (bypass cache)"
-                          className="text-[11px] text-slate-400 hover:text-slate-700 border border-slate-200 px-2.5 py-1 rounded transition-colors disabled:opacity-40"
+                          title="Re-run (bypass cache)"
+                          className="text-xs text-slate-400 hover:text-slate-600 border border-slate-200 px-2 py-1.5 rounded transition-colors disabled:opacity-40"
                         >
-                          {isRunning ? "Running…" : "⟳ Re-analyze"}
+                          {isRunning ? "Running…" : "↺"}
                         </button>
-                      </div>
+                        {result.cached && <span className="text-[10px] text-slate-400">cached</span>}
+                      </>
                     )}
+                    {/* Step 2: Rerun — always visible */}
+                    <button
+                      onClick={async () => {
+                        try { await (api.demo as { rerun: (id: string) => Promise<unknown> }).rerun(alert.device_id); }
+                        catch { /* ignore */ }
+                      }}
+                      className="text-xs px-3 py-1.5 rounded border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors"
+                    >
+                      Rerun
+                    </button>
                   </div>
+                </div>
+
+                {/* Signal summary — primary diagnostic context */}
+                <div className="mt-2.5 pl-7">
+                  <p className="text-xs text-slate-700 leading-relaxed">{alert.summary}</p>
+                  {/* Next step hint once analyzed but collapsed */}
+                  {result && !isExpanded && result.work_order?.repair_steps?.[0] && (
+                    <p className="text-[11px] text-slate-500 mt-1.5 border-t border-slate-100 pt-1.5">
+                      <span className="text-slate-400">Next step →</span> {result.work_order.repair_steps[0]}
+                    </p>
+                  )}
                 </div>
               </div>
 
-              {/* AI Results — collapsed by default, expand on click */}
+              {/* Inline "generating" response — visible while agent is running */}
+              {isRunning && (
+                <div className="border-t border-slate-100 px-4 py-3 bg-slate-50 flex items-center gap-2">
+                  <span className="w-1.5 h-1.5 rounded-full animate-pulse shrink-0" style={{ background: "#009999" }} />
+                  <span className="text-xs text-slate-500 font-mono">
+                    Analyzing telemetry
+                    <span className="animate-pulse">…</span>
+                  </span>
+                </div>
+              )}
+
+              {/* Analysis — collapsed by default */}
               {result && isExpanded && (
                 <div className="border-t border-slate-100 p-4 space-y-4 bg-slate-50">
-                  <div className="flex items-center gap-2 text-xs text-slate-500">
-                    <span style={{ color: "#009999" }}>◈</span>
-                    <span>AI analysis</span>
-                    <span className="font-mono text-slate-400 ml-1">run …{result.agent_run_id?.slice(-8)}</span>
-                  </div>
-
                   {Array.isArray(agentRun?.retrieved_documents) && (
                     <div id="retrieved-context-panel">
                       <RetrievedContextPanel
@@ -331,11 +406,21 @@ export default function AlertsPage() {
 
                   <div className="grid grid-cols-1 xl:grid-cols-2 gap-4" id="rca-wo-grid">
                     <div>
-                      <p className="text-xs text-slate-500 mb-2 font-semibold uppercase tracking-wide">Root Cause</p>
-                      <RootCauseCard rca={result.root_cause} />
+                      <div className="flex items-center gap-1.5 mb-2">
+                        <p className="text-xs text-slate-500 font-medium">Suspected cause</p>
+                        {freshResultIds.has(alert.id) && !result.cached && (
+                          <span className="text-[9px] font-medium px-1.5 py-0.5 rounded border" style={{ color: "#009999", borderColor: "#009999", background: "#f0fdfa" }}>
+                            live
+                          </span>
+                        )}
+                        {result.cached && (
+                          <span className="text-[9px] text-slate-400 font-medium">cached</span>
+                        )}
+                      </div>
+                      <RootCauseCard rca={result.root_cause} animate={freshResultIds.has(alert.id) && !result.cached} />
                     </div>
                     <div>
-                      <p className="text-xs text-slate-500 mb-2 font-semibold uppercase tracking-wide">Work Order</p>
+                      <p className="text-xs text-slate-500 mb-2 font-medium">Work order</p>
                       <WorkOrderCard wo={result.work_order} deviceInfo={deviceInfo} />
                     </div>
                   </div>
@@ -354,10 +439,9 @@ export default function AlertsPage() {
             className="w-full flex items-center justify-between px-4 py-3 hover:bg-slate-50 transition-colors"
           >
             <span className="flex items-center gap-2.5 text-sm text-slate-700 font-medium">
-              <span style={{ color: "#009999" }}>◈</span>
-              AI Knowledge Base
+              Analysis History
               <span className="text-xs font-normal text-slate-400">
-                — {kb.total_runs} stored run{kb.total_runs !== 1 ? "s" : ""}
+                — {kb.total_runs} run{kb.total_runs !== 1 ? "s" : ""}
               </span>
             </span>
             <span className="text-slate-400 text-xs">{kbOpen ? "▾" : "▸"}</span>
@@ -431,6 +515,20 @@ export default function AlertsPage() {
           )}
         </div>
       )}
+      <RuntimeDebugPanel
+        title="Alerts Runtime"
+        metrics={{
+          open_alerts: alerts.length,
+          results_cache: Object.keys(results).length,
+          agent_runs_cache: Object.keys(agentRuns).length,
+          expanded: expandedResults.size,
+          fresh_results: freshResultIds.size,
+          new_highlights: newAlertIds.size,
+          known_ids: knownIds.current.size,
+          cached_devices: Object.keys(devices).length,
+          pending_highlight_timers: highlightTimeouts.current.size,
+        }}
+      />
     </main>
   );
 }
