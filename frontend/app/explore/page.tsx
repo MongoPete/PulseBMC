@@ -228,15 +228,10 @@ function ResultTable({ data }: { data: Record<string, unknown>[] }) {
   const [sortCol, setSortCol] = useState<string | null>(null);
   const [sortDir, setSortDir] = useState<SortDir>(null);
 
-  if (!data || data.length === 0) return (
-    <div className="rounded-lg border border-slate-200 bg-white px-6 py-10 text-center">
-      <p className="text-slate-500 text-sm">No matching documents found in Atlas.</p>
-    </div>
-  );
-
-  const keys = Object.keys(data[0]).filter((k) => k !== "embedding");
+  const keys = data && data.length > 0 ? Object.keys(data[0]).filter((k) => k !== "embedding") : [];
 
   const filtered = useMemo(() => {
+    if (!data || data.length === 0) return [];
     let rows = data;
     if (filter.trim()) {
       const q = filter.toLowerCase();
@@ -266,6 +261,12 @@ function ResultTable({ data }: { data: Record<string, unknown>[] }) {
       setSortDir("asc");
     }
   };
+
+  if (!data || data.length === 0) return (
+    <div className="rounded-lg border border-slate-200 bg-white px-6 py-10 text-center">
+      <p className="text-slate-500 text-sm">No matching documents found in Atlas.</p>
+    </div>
+  );
 
   const exportJson = () => {
     const blob = new Blob([JSON.stringify(filtered, null, 2)], { type: "application/json" });
@@ -382,6 +383,7 @@ export default function ExplorePage() {
   const [timeScope, setTimeScope] = useState<"1h" | "24h" | "7d" | "all">("24h");
   const [history, setHistory] = useState<string[]>([]);
   const [activeCategory, setActiveCategory] = useState("All");
+  const [ribbonOpen, setRibbonOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -413,6 +415,7 @@ export default function ExplorePage() {
 
   const handleChip = (q: string) => {
     setQuestion(q);
+    setRibbonOpen(false);
     inputRef.current?.focus();
     ask(q);
   };
@@ -434,9 +437,9 @@ export default function ExplorePage() {
       {/* Header */}
       <div className="flex items-start justify-between mb-5 gap-4 flex-wrap">
         <div>
-          <h1 className="text-xl font-bold text-slate-800">Fleet Explorer</h1>
+          <h1 className="text-xl font-bold text-slate-800">Telemetry Query</h1>
           <p className="text-sm text-slate-500 mt-0.5">
-            Natural language queries against Atlas — each question maps to a specific MongoDB feature.
+            Query fleet telemetry in plain English — each query resolves to a specific MongoDB operation against Atlas.
           </p>
         </div>
       </div>
@@ -452,7 +455,7 @@ export default function ExplorePage() {
             value={question}
             onChange={(e) => setQuestion(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && question && ask(question)}
-            placeholder="e.g. Which device has the most failures this week?"
+            placeholder="e.g. Which device has the highest fault rate this week?"
             className="flex-1 bg-white border border-slate-300 rounded-lg px-4 py-3 text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-400"
           />
           <button
@@ -506,46 +509,64 @@ export default function ExplorePage() {
         </div>
       </div>
 
-      {/* Starter questions */}
-      <div id="starter-questions" className="mb-8">
-        <div className="flex items-center gap-2 mb-2 flex-wrap">
-          <span className="text-xs text-slate-400 font-medium">Try these — each exercises a different MongoDB feature:</span>
-          <div className="flex gap-1 flex-wrap">
-            {CATEGORIES.map((cat) => (
-              <button
-                key={cat}
-                onClick={() => setActiveCategory(cat)}
-                className={`text-[10px] px-2 py-0.5 rounded border transition-colors font-medium ${
-                  activeCategory === cat
-                    ? "bg-slate-700 text-white border-slate-700"
-                    : "text-slate-500 border-slate-200 hover:bg-slate-50"
-                }`}
-              >
-                {cat}
-              </button>
-            ))}
+      {/* Starter questions — collapsible ribbon */}
+      <div id="starter-questions" className="mb-5">
+        <button
+          onClick={() => setRibbonOpen((o) => !o)}
+          className="w-full flex items-center justify-between px-4 py-2.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 transition-colors"
+        >
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-semibold text-slate-600">Sample queries</span>
+            <span className="text-[10px] text-slate-400">— each exercises a different MongoDB feature</span>
+            <span className="text-[10px] font-mono bg-slate-100 border border-slate-200 text-slate-500 px-1.5 py-0.5 rounded">
+              {STARTER_QUESTIONS.length} queries
+            </span>
           </div>
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-          {filteredQuestions.map((sq) => (
-            <button
-              key={sq.q}
-              onClick={() => handleChip(sq.q)}
-              className="text-left border border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50 rounded-lg px-3 py-2.5 transition-colors group"
-            >
-              <div className="flex items-center gap-1.5 mb-1">
-                <span className="text-[9px] font-medium text-slate-400 uppercase tracking-wide">{sq.category}</span>
-                <span className="text-slate-300">·</span>
-                <span className="text-[11px] font-medium text-slate-600">{sq.label}</span>
-              </div>
-              <div className="text-xs text-slate-700 group-hover:text-slate-900 mb-1.5 leading-relaxed">{sq.q}</div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-[10px] font-mono bg-emerald-50 border border-emerald-200 text-emerald-700 px-1.5 py-0.5 rounded">MDB: {sq.mdb}</span>
-                <span className="text-[10px] font-mono bg-blue-50 border border-blue-200 text-blue-700 px-1.5 py-0.5 rounded">SQL: {sq.sql}</span>
-              </div>
-            </button>
-          ))}
-        </div>
+          <span className="text-slate-400 text-xs font-mono">{ribbonOpen ? "▾ hide" : "▸ show"}</span>
+        </button>
+
+        {ribbonOpen && (
+          <div className="mt-2 border border-slate-200 rounded-lg bg-white overflow-hidden">
+            {/* Category filter */}
+            <div className="flex items-center gap-1.5 px-4 py-2.5 border-b border-slate-100 flex-wrap">
+              <span className="text-[10px] text-slate-400 font-medium mr-1">Filter:</span>
+              {CATEGORIES.map((cat) => (
+                <button
+                  key={cat}
+                  onClick={() => setActiveCategory(cat)}
+                  className={`text-[10px] px-2 py-0.5 rounded border transition-colors font-medium ${
+                    activeCategory === cat
+                      ? "bg-slate-700 text-white border-slate-700"
+                      : "text-slate-500 border-slate-200 hover:bg-slate-50"
+                  }`}
+                >
+                  {cat}
+                </button>
+              ))}
+            </div>
+            {/* Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-px bg-slate-100">
+              {filteredQuestions.map((sq) => (
+                <button
+                  key={sq.q}
+                  onClick={() => handleChip(sq.q)}
+                  className="text-left bg-white hover:bg-slate-50 px-4 py-3 transition-colors group"
+                >
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <span className="text-[9px] font-medium text-slate-400 uppercase tracking-wide">{sq.category}</span>
+                    <span className="text-slate-300">·</span>
+                    <span className="text-[11px] font-medium text-slate-600">{sq.label}</span>
+                  </div>
+                  <div className="text-xs text-slate-700 group-hover:text-slate-900 mb-1.5 leading-relaxed">{sq.q}</div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-[10px] font-mono bg-emerald-50 border border-emerald-200 text-emerald-700 px-1.5 py-0.5 rounded">MDB: {sq.mdb}</span>
+                    <span className="text-[10px] font-mono bg-blue-50 border border-blue-200 text-blue-700 px-1.5 py-0.5 rounded">SQL: {sq.sql}</span>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Results */}

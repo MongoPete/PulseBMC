@@ -50,3 +50,20 @@ export function fmtRelative(iso: string | null | undefined): string {
   if (hrs < 24) return `${hrs}h ago`;
   return `${Math.round(hrs / 24)}d ago`;
 }
+
+/**
+ * Combined relative + wall-clock label for uniform timestamp display.
+ * Recent (< 24h): "25s ago · 10:32:50 AM"
+ * Older:          "2d ago · 6/3, 10:32 AM"
+ */
+export function fmtAgeWithClock(iso: string | null | undefined): string {
+  const d = parseServerDate(iso);
+  if (!d) return "—";
+  const rel = fmtRelative(iso);
+  const ageMs = Date.now() - d.getTime();
+  const clock =
+    ageMs < 86_400_000
+      ? d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })
+      : d.toLocaleString([], { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" });
+  return `${rel} · ${clock}`;
+}

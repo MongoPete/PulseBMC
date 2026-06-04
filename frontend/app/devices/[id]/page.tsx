@@ -8,10 +8,11 @@ import TelemetryChart from "@/components/TelemetryChart";
 import ThermalTrendChart from "@/components/ThermalTrendChart";
 import QueryTooltip from "@/components/QueryTooltip";
 import RuntimeDebugPanel from "@/components/RuntimeDebugPanel";
-import { api, SSE_URL } from "@/lib/api";
+import { api } from "@/lib/api";
 import { fmtTime, fmtDateTime, fmtRelative } from "@/lib/time";
 import { JsonLight } from "@/components/SyntaxHighlight";
-import { trackedEventSource, trackedInterval, trackedTimeout } from "@/lib/runtimeDebug";
+import { trackedInterval, trackedTimeout } from "@/lib/runtimeDebug";
+import { subscribeLiveMessages, subscribeLiveStatus } from "@/lib/liveStream";
 
 const DATE_FIELDS = new Set(["last_seen", "registered_at", "created_at", "updated_at", "started_at", "completed_at"]);
 
@@ -163,17 +164,17 @@ export default function DevicePage() {
   }, [id]);
 
   useEffect(() => {
-    const { es, close } = trackedEventSource(SSE_URL);
-    es.onopen = () => setSseConnected(true);
-    es.onmessage = (e) => {
-      const payload = JSON.parse(e.data);
+    const unsubStatus = subscribeLiveStatus(setSseConnected);
+    const unsubMsg = subscribeLiveMessages((payload) => {
       if (payload.device_id === id && payload.led_state) {
-        setLedState(payload.led_state);
+        setLedState(payload.led_state as LedState);
         refreshRunAndTelemetry().catch(() => {});
       }
+    });
+    return () => {
+      unsubStatus();
+      unsubMsg();
     };
-    es.onerror = () => setSseConnected(false);
-    return () => close();
   }, [id, refreshRunAndTelemetry]);
 
   // Single-core sweep: one cell at a time pulses amber while testing

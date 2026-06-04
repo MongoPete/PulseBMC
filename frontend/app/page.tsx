@@ -1,13 +1,18 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import DeviceGrid from "@/components/DeviceGrid";
 import DemoControls from "@/components/DemoControls";
+import LiveFeed from "@/components/LiveFeed";
+import ConceptBar from "@/components/ConceptBar";
 import RuntimeDebugPanel from "@/components/RuntimeDebugPanel";
 import type { LedState } from "@/components/LedIndicator";
 import LedIndicator from "@/components/LedIndicator";
-import { api, SSE_URL } from "@/lib/api";
-import { fmtRelative } from "@/lib/time";
-import { trackedEventSource, trackedInterval, trackedTimeout } from "@/lib/runtimeDebug";
+import { api } from "@/lib/api";
+import { fmtAgeWithClock } from "@/lib/time";
+import { trackedInterval, trackedTimeout } from "@/lib/runtimeDebug";
+import { subscribeLiveMessages } from "@/lib/liveStream";
+import { subscribeSimState } from "@/lib/simState";
 
 interface Device {
   device_id: string;
@@ -47,14 +52,19 @@ function DeviceDrawer({
   data,
   onClose,
   onAction,
+  rerunning,
+  isolating,
 }: {
   deviceId: string;
   ledState: LedState;
   data: DrawerData;
   onClose: () => void;
   onAction: (action: "logs" | "analysis" | "rerun" | "isolate") => void;
+  rerunning: boolean;
+  isolating: boolean;
 }) {
   const { device, runs, loading } = data;
+  const isIsolated = device?.status === "maintenance";
   const latestRun = runs[0];
   const components = latestRun?.results?.components ?? [];
   const failingComponents = components.filter((c) => c.result === "fail");
@@ -206,7 +216,7 @@ function DeviceDrawer({
                           <span className={`w-8 font-semibold shrink-0 ${run.status === "fail" ? "text-red-600" : "text-green-600"}`}>
                             {run.status.toUpperCase()}
                           </span>
-                          <span className="text-slate-400 flex-1" title={run.started_at ?? ""}>{fmtRelative(run.started_at)}</span>
+                          <span className="text-slate-400 flex-1 tabular-nums">{fmtAgeWithClock(run.started_at)}</span>
                           {run.failure_mode && run.failure_mode !== "none" && (
                             <span className="text-[10px] text-amber-500 capitalize">{run.failure_mode}</span>
                           )}
@@ -255,16 +265,22 @@ function DeviceDrawer({
           <div className="grid grid-cols-2 gap-2">
             <button
               onClick={() => onAction("analysis")}
-              className="text-xs px-3 py-2 rounded-lg border font-medium transition-colors"
+              className="text-xs px-3 py-2 rounded-lg border font-medium transition-colors hover:opacity-80"
               style={{ borderColor: "#009999", color: "#009999" }}
             >
               Run Analysis
             </button>
             <button
               onClick={() => onAction("rerun")}
-              className="text-xs px-3 py-2 rounded-lg border border-slate-300 text-slate-700 font-medium hover:bg-slate-50 transition-colors"
+              disabled={rerunning}
+              className="text-xs px-3 py-2 rounded-lg border border-slate-300 text-slate-700 font-medium hover:bg-slate-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1.5"
             >
-              Rerun Test
+              {rerunning ? (
+                <>
+                  <span className="w-3 h-3 border border-slate-400 border-t-transparent rounded-full animate-spin" />
+                  Running…
+                </>
+              ) : "Rerun Test"}
             </button>
           </div>
           <button
@@ -275,9 +291,19 @@ function DeviceDrawer({
           </button>
           <button
             onClick={() => onAction("isolate")}
-            className="w-full text-xs px-3 py-2 rounded-lg border border-amber-300 text-amber-700 hover:bg-amber-50 transition-colors"
+            disabled={isolating}
+            className={`w-full text-xs px-3 py-2 rounded-lg border font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1.5 ${
+              isIsolated
+                ? "border-slate-300 text-slate-700 hover:bg-slate-50"
+                : "border-amber-300 text-amber-700 hover:bg-amber-50"
+            }`}
           >
-            Isolate Device
+            {isolating ? (
+              <>
+                <span className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin" />
+                Updating…
+              </>
+            ) : isIsolated ? "Restore Device" : "Isolate Device"}
           </button>
         </div>
       </aside>
@@ -288,13 +314,17 @@ function DeviceDrawer({
 // ── Fleet Page ─────────────────────────────────────────────────────────────────
 
 export default function FleetPage() {
+  const router = useRouter();
   const [devices, setDevices] = useState<Device[]>([]);
   const [liveStates, setLiveStates] = useState<Record<string, LedState>>({});
   const [pulses, setPulses] = useState<Record<string, number>>({});
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
   const [loading, setLoading] = useState(true);
   const [demoOpen, setDemoOpen] = useState(false);
+  const [liveFeedOpen, setLiveFeedOpen] = useState(false);
   const [simulatorRunning, setSimulatorRunning] = useState<boolean | null>(null);
+  const [rerunningDeviceId, setRerunningDeviceId] = useState<string | null>(null);
+  const [isolatingDeviceId, setIsolatingDeviceId] = useState<string | null>(null);
   const refreshInFlightRef = useRef(false);
 
   // Drawer state
@@ -312,13 +342,24 @@ export default function FleetPage() {
     if (refreshInFlightRef.current) return;
     refreshInFlightRef.current = true;
     try {
-      const [devRes, stateRes] = await Promise.all([
+      const [devRes, stateRes] = await Promise.allSettled([
         api.devices(),
         api.fleetStates(),
       ]);
-      setDevices(devRes.data ?? []);
-      setLiveStates((prev) => ({ ...prev, ...stateRes as Record<string, LedState> }));
-      setLastRefresh(new Date());
+
+      if (devRes.status === "fulfilled") {
+        // Keep fleet rendering resilient even if companion calls fail.
+        const payload = devRes.value as { data?: Device[]; devices?: Device[]; items?: Device[] };
+        setDevices(payload.data ?? payload.devices ?? payload.items ?? []);
+      }
+
+      if (stateRes.status === "fulfilled") {
+        setLiveStates((prev) => ({ ...prev, ...(stateRes.value as Record<string, LedState>) }));
+      }
+
+      if (devRes.status === "fulfilled" || stateRes.status === "fulfilled") {
+        setLastRefresh(new Date());
+      }
     } catch {
       /* silent */
     } finally {
@@ -328,14 +369,12 @@ export default function FleetPage() {
   }, []);
 
   useEffect(() => {
-    const initial = trackedTimeout(() => {
-      refreshAll();
-      api.demo.state()
-        .then((s) => setSimulatorRunning(s.simulator_running))
-        .catch(() => {});
-    }, 0);
-    return () => initial.clear();
+    refreshAll();
   }, [refreshAll]);
+
+  useEffect(() => {
+    return subscribeSimState(setSimulatorRunning);
+  }, []);
 
   useEffect(() => {
     if (simulatorRunning !== true) return;
@@ -345,17 +384,15 @@ export default function FleetPage() {
   }, [refreshAll, simulatorRunning]);
 
   useEffect(() => {
-    const { es, close } = trackedEventSource(SSE_URL);
-    es.onmessage = (e) => {
-      const payload = JSON.parse(e.data);
-      if (payload.device_id && payload.led_state) {
-        setLiveStates((prev) => ({ ...prev, [payload.device_id]: payload.led_state as LedState }));
+    return subscribeLiveMessages((payload) => {
+      const deviceId = payload.device_id;
+      if (deviceId && payload.led_state) {
+        setLiveStates((prev) => ({ ...prev, [deviceId]: payload.led_state as LedState }));
         if (payload.led_state !== "amber") {
-          setPulses((prev) => ({ ...prev, [payload.device_id]: Date.now() }));
+          setPulses((prev) => ({ ...prev, [deviceId]: Date.now() }));
         }
       }
-    };
-    return () => close();
+    });
   }, []);
 
   // Open drawer and fetch data for a device
@@ -375,20 +412,25 @@ export default function FleetPage() {
 
   const handleDeviceAction = useCallback(async (deviceId: string, action: "logs" | "analysis" | "rerun" | "isolate") => {
     if (action === "logs") {
-      window.open(`/devices/${deviceId}`, "_blank");
+      window.open(`/devices/${deviceId}`, "_blank", "noopener,noreferrer");
     } else if (action === "analysis") {
-      window.location.href = `/alerts`;
+      router.push(`/alerts?device_id=${deviceId}`);
     } else if (action === "rerun") {
+      if (rerunningDeviceId) return;
+      setRerunningDeviceId(deviceId);
       try {
         await api.demo.rerun(deviceId);
-        // Re-fetch drawer data after rerun
         if (drawerDeviceId === deviceId) {
           if (reopenDrawerTimerRef.current) reopenDrawerTimerRef.current();
           const t = trackedTimeout(() => openDrawer(deviceId), 1500);
           reopenDrawerTimerRef.current = t.clear;
         }
-      } catch { /* ignore */ }
+      } catch { /* ignore */ } finally {
+        setRerunningDeviceId(null);
+      }
     } else if (action === "isolate") {
+      if (isolatingDeviceId) return;
+      setIsolatingDeviceId(deviceId);
       try {
         const currentStatus = devices.find((d) => d.device_id === deviceId)?.status;
         const newStatus = currentStatus === "maintenance" ? "online" : "maintenance";
@@ -397,15 +439,18 @@ export default function FleetPage() {
         if (drawerDeviceId === deviceId) {
           openDrawer(deviceId);
         }
-      } catch { /* ignore */ }
+      } catch { /* ignore */ } finally {
+        setIsolatingDeviceId(null);
+      }
     }
-  }, [devices, drawerDeviceId, openDrawer, refreshAll]);
+  }, [devices, drawerDeviceId, isolatingDeviceId, openDrawer, refreshAll, rerunningDeviceId, router]);
 
   const failureCount = Object.values(liveStates).filter((s) => s === "red").length;
   const amberCount = Object.values(liveStates).filter((s) => s === "amber").length;
 
   return (
     <div>
+      <ConceptBar />
       <main className="max-w-[1400px] mx-auto px-4 py-6">
         {/* Header */}
         <div className="flex items-start justify-between mb-5 gap-4 flex-wrap">
@@ -417,7 +462,7 @@ export default function FleetPage() {
                 <span className="text-amber-600 mx-1">· {amberCount} testing</span>
               )}
               {failureCount > 0 && (
-                <span className="text-red-600 mx-1">· {failureCount} failure{failureCount !== 1 ? "s" : ""}</span>
+                <span className="text-red-600 mx-1">· {failureCount} fault{failureCount !== 1 ? "s" : ""}</span>
               )}
               {lastRefresh && (
                 <span className="text-slate-400 ml-1">· {lastRefresh.toLocaleTimeString()}</span>
@@ -461,21 +506,37 @@ export default function FleetPage() {
           <span className="text-slate-400">· Right-click a device for actions</span>
         </div>
 
-        {/* Demo Controls (collapsible) */}
+        {/* Scenario Controls (collapsible) */}
         <div className="border border-slate-200 rounded-lg overflow-hidden">
           <button
             onClick={() => setDemoOpen((o) => !o)}
             className="w-full flex items-center justify-between px-4 py-3 bg-white hover:bg-slate-50 transition-colors text-left"
           >
-            <span className="text-sm font-medium text-slate-700">Demo Controls</span>
+            <span className="text-sm font-medium text-slate-700">Scenario Controls</span>
             <span className="text-slate-400 text-xs">{demoOpen ? "▾ hide" : "▸ show"}</span>
           </button>
           {demoOpen && (
             <div className="border-t border-slate-200 bg-white px-4 pb-4">
-              <DemoControls
-                onAction={refreshAll}
-                onSimulatorStateChange={setSimulatorRunning}
-              />
+              <DemoControls onAction={refreshAll} />
+            </div>
+          )}
+        </div>
+
+        {/* Live Event Feed (collapsible) */}
+        <div className="border border-slate-200 rounded-lg overflow-hidden mt-3">
+          <button
+            onClick={() => setLiveFeedOpen((o) => !o)}
+            className="w-full flex items-center justify-between px-4 py-3 bg-white hover:bg-slate-50 transition-colors text-left"
+          >
+            <span className="flex items-center gap-2 text-sm font-medium text-slate-700">
+              Live Event Feed
+              <span className="w-1.5 h-1.5 rounded-full animate-pulse inline-block" style={{ background: "#009999" }} />
+            </span>
+            <span className="text-slate-400 text-xs">{liveFeedOpen ? "▾ hide" : "▸ show"}</span>
+          </button>
+          {liveFeedOpen && (
+            <div style={{ height: 300 }}>
+              <LiveFeed />
             </div>
           )}
         </div>
@@ -499,6 +560,8 @@ export default function FleetPage() {
           data={drawerData}
           onClose={() => setDrawerDeviceId(null)}
           onAction={(action) => handleDeviceAction(drawerDeviceId, action)}
+          rerunning={rerunningDeviceId === drawerDeviceId}
+          isolating={isolatingDeviceId === drawerDeviceId}
         />
       )}
     </div>

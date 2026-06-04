@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-PulseBMC seed script — bootstraps Atlas with devices, test patterns, and historical data.
+SoCPulse seed script — bootstraps Atlas with devices, test patterns, and historical data.
 
 What it creates:
   - 20 devices across 2 datacenters
@@ -107,7 +107,7 @@ def make_rag_seed_failure(i: int) -> dict:
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Seed PulseBMC Atlas database")
+    parser = argparse.ArgumentParser(description="Seed SoCPulse Atlas database")
     parser.add_argument("--dry-run", action="store_true", help="Preview what would be inserted, no writes")
     parser.add_argument("--clear", action="store_true", help="Drop existing data before seeding")
     args = parser.parse_args()
@@ -119,7 +119,7 @@ def main():
     client = pymongo.MongoClient(ATLAS_URI)
     db = client[DB_NAME]
 
-    print("=== PulseBMC Seed Script ===")
+    print("=== SoCPulse Seed Script ===")
     print(f"  Target: {DB_NAME} on Atlas")
     if args.dry_run:
         print("  Mode: DRY RUN (no writes)")

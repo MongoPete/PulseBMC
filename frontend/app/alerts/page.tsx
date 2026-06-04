@@ -1,14 +1,17 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import QueryTooltip from "@/components/QueryTooltip";
 import RootCauseCard from "@/components/RootCauseCard";
 import WorkOrderCard from "@/components/WorkOrderCard";
 import RetrievedContextPanel from "@/components/RetrievedContextPanel";
 import LedIndicator from "@/components/LedIndicator";
+import ConceptBar from "@/components/ConceptBar";
 import RuntimeDebugPanel from "@/components/RuntimeDebugPanel";
-import { api, SSE_URL } from "@/lib/api";
+import { api } from "@/lib/api";
 import { fmtDateTime, fmtRelative } from "@/lib/time";
-import { trackedEventSource, trackedTimeout } from "@/lib/runtimeDebug";
+import { trackedTimeout } from "@/lib/runtimeDebug";
+import { subscribeLiveMessages } from "@/lib/liveStream";
 
 interface Alert {
   id: string;
@@ -55,6 +58,25 @@ interface RetrievedDoc {
   summary: string;
 }
 
+interface TestRunComponent {
+  component_id: string;
+  result: string;
+  error_code?: string;
+  core_results?: Array<{ core_id: string; result: string; temp_c?: number }>;
+}
+
+interface LatestFailRun {
+  status: string;
+  failure_mode?: string;
+  results?: { components?: TestRunComponent[] };
+  nvme_smart?: {
+    media_errors?: number;
+    num_err_log_entries?: number;
+    temperature?: number;
+    critical_warning?: number;
+  };
+}
+
 interface ChainResult {
   prediction: Record<string, unknown>;
   root_cause: RootCause;
@@ -80,6 +102,10 @@ const SEVERITY_META: Record<string, { border: string; bg: string; badge: string;
 };
 
 export default function AlertsPage() {
+  const searchParams = useSearchParams();
+  const targetDeviceId = searchParams.get("device_id");
+  const autoTriggeredRef = useRef(false);
+
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [devices, setDevices] = useState<Record<string, DeviceInfo>>({});
   const [queryInfo, setQueryInfo] = useState<Record<string, unknown> | null>(null);
@@ -90,6 +116,7 @@ export default function AlertsPage() {
   const [kbOpen, setKbOpen] = useState(false);
   const [expandedResults, setExpandedResults] = useState<Set<string>>(new Set());
   const [freshResultIds, setFreshResultIds] = useState<Set<string>>(new Set());
+  const [latestRuns, setLatestRuns] = useState<Record<string, LatestFailRun>>({});
   const [lastCapture, setLastCapture] = useState<{ msg: string; ts: string } | null>(null);
   const [newAlertIds, setNewAlertIds] = useState<Set<string>>(new Set());
   const knownIds = useRef<Set<string>>(new Set());
@@ -153,6 +180,12 @@ export default function AlertsPage() {
     setFreshResultIds((prev) => new Set([...prev].filter((id) => incomingIds.has(id))));
     setNewAlertIds((prev) => new Set([...prev].filter((id) => incomingIds.has(id))));
 
+    // Prune thermal run cache for devices no longer in any open alert.
+    const activeDeviceIds = new Set(incoming.map((a) => a.device_id));
+    setLatestRuns((prev) =>
+      Object.fromEntries(Object.entries(prev).filter(([id]) => activeDeviceIds.has(id)))
+    );
+
     setQueryInfo(res.query_info ?? null);
 
     // Fetch device metadata for devices we have not fetched yet.
@@ -179,11 +212,9 @@ export default function AlertsPage() {
   }, [refresh]);
 
   useEffect(() => {
-    const { es, close } = trackedEventSource(SSE_URL);
-    es.onmessage = (e) => {
-      const payload = JSON.parse(e.data);
+    return subscribeLiveMessages((payload) => {
       if (payload.connected) return;
-      const ts = new Date().toLocaleTimeString("en-US", { hour12: false });
+      const ts = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
       if (payload.event_type === "alert") {
         setLastCapture({ msg: payload.message || `Alert fired on ${payload.device_id}`, ts });
         if (Date.now() - lastRefreshAt.current > 3000) refresh();
@@ -192,14 +223,18 @@ export default function AlertsPage() {
       } else if (payload.device_id) {
         setLastCapture({ msg: `Loopback captured on ${payload.device_id}`, ts });
       }
-    };
-    return () => close();
+    });
   }, [refresh]);
 
   const runChain = async (alert: Alert, forceRefresh = false) => {
     setRunning(alert.id);
     try {
-      const res = await api.agentChain(alert.id, alert.device_id, forceRefresh) as ChainResult;
+      const [res, runsRes] = await Promise.all([
+        api.agentChain(alert.id, alert.device_id, forceRefresh) as Promise<ChainResult>,
+        api.testRuns(alert.device_id, 5),
+      ]);
+      const failRun = (runsRes.data as LatestFailRun[] ?? []).find((r) => r.status === "fail");
+      if (failRun) setLatestRuns((prev) => ({ ...prev, [alert.device_id]: failRun }));
       setResults((prev) => ({ ...prev, [alert.id]: res }));
       setExpandedResults((prev) => new Set([...prev, alert.id]));
       // Mark as fresh only when newly generated (not a cache hit) so we animate it
@@ -218,14 +253,30 @@ export default function AlertsPage() {
     }
   };
 
+  // Auto-trigger analysis when arriving via "Run Analysis" from the fleet context menu.
+  useEffect(() => {
+    if (!targetDeviceId || autoTriggeredRef.current || alerts.length === 0) return;
+    const match = alerts.find((a) => a.device_id === targetDeviceId);
+    if (!match || results[match.id]) return;
+    autoTriggeredRef.current = true;
+    runChain(match);
+  // runChain is stable within a render; targetDeviceId and alerts drive re-evaluation
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [alerts, targetDeviceId]);
+
+  const displayedAlerts = targetDeviceId
+    ? alerts.filter((a) => a.device_id === targetDeviceId)
+    : alerts;
+
   return (
     <main className="max-w-5xl mx-auto px-4 py-6">
+      <ConceptBar />
       {/* Page header */}
       <div className="flex items-center justify-between mb-5">
         <div>
           <h1 className="text-xl font-bold text-slate-800">Open Alerts</h1>
           <div className="text-sm text-slate-500 mt-0.5 flex items-center gap-1 flex-wrap">
-            Generated when failure rate exceeds 10%
+            Raised when loopback fault rate exceeds threshold
             {queryInfo && <QueryTooltip queryInfo={queryInfo as Parameters<typeof QueryTooltip>[0]["queryInfo"]} label="query" />}
           </div>
         </div>
@@ -233,6 +284,26 @@ export default function AlertsPage() {
           {alerts.length} open
         </span>
       </div>
+
+      {/* Device filter banner — shown when arriving from "Run Analysis" context menu */}
+      {targetDeviceId && (
+        <div className="mb-4 flex items-center gap-2 text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white">
+          <span className="text-slate-500">Analyzing</span>
+          <span className="font-mono font-semibold text-slate-800">{targetDeviceId}</span>
+          {displayedAlerts.length === 0 ? (
+            <span className="text-slate-400 text-xs">— no open alerts for this device</span>
+          ) : (
+            <span className="text-slate-400 text-xs">— {displayedAlerts.length} alert{displayedAlerts.length !== 1 ? "s" : ""}</span>
+          )}
+          <a
+            href="/alerts"
+            className="ml-auto text-xs hover:underline"
+            style={{ color: "#009999" }}
+          >
+            Show all alerts
+          </a>
+        </div>
+      )}
 
       {/* Live capture indicator */}
       <div className="flex items-center gap-2 mb-5 text-xs">
@@ -257,7 +328,7 @@ export default function AlertsPage() {
       )}
 
       <div id="alert-list" className="space-y-3">
-        {alerts.map((alert, idx) => {
+        {displayedAlerts.map((alert, idx) => {
           const result = results[alert.id];
           const agentRun = agentRuns[alert.id];
           const isRunning = running === alert.id;
@@ -364,7 +435,7 @@ export default function AlertsPage() {
                       }}
                       className="text-xs px-3 py-1.5 rounded border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors"
                     >
-                      Rerun
+                      Rerun Test
                     </button>
                   </div>
                 </div>
@@ -386,7 +457,7 @@ export default function AlertsPage() {
                 <div className="border-t border-slate-100 px-4 py-3 bg-slate-50 flex items-center gap-2">
                   <span className="w-1.5 h-1.5 rounded-full animate-pulse shrink-0" style={{ background: "#009999" }} />
                   <span className="text-xs text-slate-500 font-mono">
-                    Analyzing telemetry
+                    Running fault isolation
                     <span className="animate-pulse">…</span>
                   </span>
                 </div>
@@ -403,6 +474,97 @@ export default function AlertsPage() {
                       />
                     </div>
                   )}
+
+                  {/* Sub-partition Thermal Evidence */}
+                  {latestRuns[alert.device_id] && (() => {
+                    const run = latestRuns[alert.device_id];
+                    const allComps = run.results?.components ?? [];
+                    if (allComps.length === 0) return null;
+                    return (
+                      <div className="rounded-lg border border-slate-200 bg-white p-4">
+                        <div className="flex items-center justify-between mb-3">
+                          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">
+                            Sub-partition Thermal Evidence
+                          </p>
+                          <span className="text-[10px] text-slate-400">baseline 38–62°C</span>
+                        </div>
+                        <div className="space-y-3">
+                          {allComps.map((comp) => (
+                            <div key={comp.component_id}>
+                              <div className="flex items-center gap-2 mb-1.5">
+                                <span className={`w-2 h-2 rounded-sm shrink-0 ${comp.result === "fail" ? "bg-red-500" : "bg-green-400"}`} />
+                                <span className="text-xs font-mono text-slate-600">{comp.component_id}</span>
+                                {comp.error_code && comp.result === "fail" && (
+                                  <span className="text-[10px] font-mono text-red-500 bg-red-50 px-1.5 py-0.5 rounded">{comp.error_code}</span>
+                                )}
+                                {comp.result !== "fail" && (
+                                  <span className="text-[10px] text-green-600">all cores pass</span>
+                                )}
+                              </div>
+                              {comp.core_results && comp.core_results.length > 0 && (
+                                <>
+                                  <div className="ml-4 flex gap-1.5 flex-wrap">
+                                    {comp.core_results.map((core) => (
+                                      <div
+                                        key={core.core_id}
+                                        title={`${core.core_id} · ${core.result}${core.temp_c != null ? ` · ${core.temp_c}°C` : ""}`}
+                                        className={`w-7 h-7 rounded border text-[9px] font-mono flex items-center justify-center font-bold ${
+                                          core.result === "fail"
+                                            ? "bg-red-50 border-red-300 text-red-600"
+                                            : "bg-white border-slate-200 text-slate-400"
+                                        }`}
+                                      >
+                                        {core.core_id.replace("core_", "")}
+                                      </div>
+                                    ))}
+                                  </div>
+                                  {comp.core_results.some((c) => c.temp_c != null) && (
+                                    <div className="ml-4 flex gap-3 pt-1.5 text-[10px] font-mono flex-wrap">
+                                      {comp.core_results
+                                        .filter((c) => c.temp_c != null)
+                                        .map((c) => (
+                                          <span
+                                            key={c.core_id}
+                                            className={
+                                              c.temp_c! > 85
+                                                ? "text-red-600 font-semibold"
+                                                : c.temp_c! > 70
+                                                ? "text-amber-600"
+                                                : "text-slate-400"
+                                            }
+                                          >
+                                            {c.core_id.replace("core_", "C")}: {c.temp_c}°
+                                          </span>
+                                        ))}
+                                    </div>
+                                  )}
+                                </>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                        {(run.nvme_smart || run.failure_mode) && (
+                          <div className="mt-3 pt-3 border-t border-slate-100 flex flex-wrap gap-4 text-[10px] font-mono text-slate-500">
+                            {run.failure_mode && (
+                              <span>
+                                mode: <span className="text-amber-600 font-semibold">{run.failure_mode}</span>
+                              </span>
+                            )}
+                            {run.nvme_smart && (
+                              <>
+                                <span>media_errors: <span className={run.nvme_smart.media_errors ? "text-red-500 font-semibold" : ""}>{run.nvme_smart.media_errors ?? 0}</span></span>
+                                <span>err_log: {run.nvme_smart.num_err_log_entries ?? 0}</span>
+                                <span>nvme_temp: {run.nvme_smart.temperature ?? "?"}°C</span>
+                                {!!run.nvme_smart.critical_warning && (
+                                  <span className="text-red-500 font-semibold">critical_warning={run.nvme_smart.critical_warning}</span>
+                                )}
+                              </>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
 
                   <div className="grid grid-cols-1 xl:grid-cols-2 gap-4" id="rca-wo-grid">
                     <div>

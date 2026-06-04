@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { SSE_URL, api } from "@/lib/api";
-import { trackedEventSource, trackedInterval } from "@/lib/runtimeDebug";
+import { subscribeLiveMessages, subscribeLiveStatus } from "@/lib/liveStream";
+import { subscribeSimState, controlSim } from "@/lib/simState";
 
 interface FeedEvent {
   id: number;
@@ -20,7 +20,7 @@ function eventLabel(ev: FeedEvent): { text: string; color: string } {
     return { text: ev.message || `Alert fired on ${ev.device_id}`, color: "text-rose-400" };
   }
   if (ev.event_type === "demo") {
-    return { text: ev.message || `Demo action on ${ev.device_id}`, color: "text-amber-400" };
+    return { text: ev.message || `Scenario triggered on ${ev.device_id}`, color: "text-amber-400" };
   }
   // Normal test_run
   const state = ev.led_state === "green" ? "pass" : ev.led_state === "red" ? "FAIL" : ev.led_state;
@@ -35,9 +35,10 @@ function EventTypeTag({ type }: { type: string }) {
     test_run: "bg-slate-700/50 text-slate-400 border border-slate-600/40",
   };
   const cls = styles[type] ?? styles.test_run;
+  const label = type === "test_run" ? "run" : type === "demo" ? "scenario" : type;
   return (
     <span className={`px-1.5 py-px rounded text-[10px] font-mono leading-none ${cls}`}>
-      {type === "test_run" ? "run" : type}
+      {label}
     </span>
   );
 }
@@ -45,26 +46,19 @@ function EventTypeTag({ type }: { type: string }) {
 export default function LiveFeed() {
   const [events, setEvents] = useState<FeedEvent[]>([]);
   const [connected, setConnected] = useState(false);
-  const [running, setRunning] = useState(true);
+  const [running, setRunning] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const counterRef = useRef(0);
 
-  const syncState = () =>
-    api.demo.state().then((s) => setRunning(s.simulator_running)).catch(() => {});
-
-  // Load initial simulator state, then keep it fresh
   useEffect(() => {
-    syncState();
-    const i = trackedInterval(syncState, 5000);
-    return () => i.clear();
+    return subscribeSimState(setRunning);
   }, []);
 
   const control = async (action: "start" | "stop" | "restart") => {
     setBusy(true);
     try {
-      const res = await api.demo.simulator(action);
-      setRunning(res.running);
+      await controlSim(action);
     } catch {
       /* ignore */
     } finally {
@@ -73,17 +67,12 @@ export default function LiveFeed() {
   };
 
   useEffect(() => {
-    const { es, close } = trackedEventSource(SSE_URL);
-
-    es.onopen = () => setConnected(true);
-    es.onerror = () => setConnected(false);
-
-    es.onmessage = (e) => {
-      const payload = JSON.parse(e.data);
+    const unsubStatus = subscribeLiveStatus(setConnected);
+    const unsubMsg = subscribeLiveMessages((payload) => {
       if (payload.connected) return; // handshake ping
 
       const now = new Date();
-      const ts = now.toLocaleTimeString("en-US", { hour12: false });
+      const ts = now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
 
       setEvents((prev) => {
         const next = [
@@ -100,9 +89,12 @@ export default function LiveFeed() {
         ];
         return next.length > MAX_EVENTS ? next.slice(next.length - MAX_EVENTS) : next;
       });
-    };
+    });
 
-    return () => close();
+    return () => {
+      unsubStatus();
+      unsubMsg();
+    };
   }, []);
 
   // Auto-scroll to bottom on new events
@@ -124,7 +116,7 @@ export default function LiveFeed() {
             }`}
             title="Loopback simulator process status"
           >
-            simulator {running ? "running" : "stopped"}
+            simulator {running === null ? "…" : running ? "running" : "stopped"}
           </span>
         </span>
         <div className="flex items-center gap-1.5">
@@ -140,7 +132,7 @@ export default function LiveFeed() {
           ) : (
             <button
               onClick={() => control("start")}
-              disabled={busy}
+              disabled={busy || running === null}
               title="Start the loopback simulator"
               className="text-[11px] px-2 py-0.5 rounded border border-emerald-700/60 text-emerald-300 hover:bg-emerald-900/30 transition-colors disabled:opacity-40"
             >
@@ -149,7 +141,7 @@ export default function LiveFeed() {
           )}
           <button
             onClick={() => control("restart")}
-            disabled={busy}
+            disabled={busy || running === null}
             title="Restart the loopback simulator"
             className="text-[11px] px-2 py-0.5 rounded border border-slate-600/60 text-slate-300 hover:bg-slate-700/40 transition-colors disabled:opacity-40"
           >
@@ -160,7 +152,7 @@ export default function LiveFeed() {
 
       {/* Column headers */}
       <div className="flex items-center gap-2 px-3 py-1.5 border-b border-slate-800/60 bg-slate-900/30 shrink-0">
-        <span className="text-[10px] text-slate-600 w-[52px]">time</span>
+        <span className="text-[10px] text-slate-600 w-[80px]">time</span>
         <span className="text-[10px] text-slate-600 w-[38px]">type</span>
         <span className="text-[10px] text-slate-600">event</span>
       </div>
@@ -179,7 +171,7 @@ export default function LiveFeed() {
               key={ev.id}
               className="flex items-start gap-2 px-3 py-0.5 hover:bg-slate-800/30 transition-colors"
             >
-              <span className="text-slate-600 shrink-0 w-[52px] tabular-nums">{ev.ts}</span>
+              <span className="text-slate-600 shrink-0 w-[80px] tabular-nums">{ev.ts}</span>
               <span className="shrink-0 w-[38px]">
                 <EventTypeTag type={ev.event_type} />
               </span>

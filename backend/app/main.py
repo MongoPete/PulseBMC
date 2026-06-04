@@ -13,15 +13,12 @@ from app.services import sim_control
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await ensure_indexes()
-    # Auto-start the loopback simulator so the fleet is live on load.
-    # The browser can stop/start/restart it via /api/demo/simulator/*.
-    sim_control.start()
     yield
     sim_control.stop()
     await close_client()
 
 
-app = FastAPI(title="PulseBMC API", lifespan=lifespan)
+app = FastAPI(title="SoCPulse API", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,

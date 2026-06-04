@@ -3,7 +3,8 @@
 @theme inline {
   --color-siemens-teal: #009999;
   --color-siemens-bg: #F4F7F9;
-  --color-siemens-dark: #1B1B1B;
+  --color-siemens-dark: #000028;
+  --color-siemens-ink: #1B1B1B;
   --color-siemens-red: #CC0000;
   --color-siemens-amber: #F5A623;
 }

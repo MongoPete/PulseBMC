@@ -47,7 +47,7 @@ export default function RetrievedContextPanel({ docs, agentRunId }: Props) {
         <div className="border-t border-slate-100 bg-slate-50 p-4 space-y-3">
           <p className="text-xs text-slate-500 leading-relaxed">
             Semantically similar past failures retrieved via{" "}
-            <span className="font-mono text-slate-700">$vectorSearch</span> using Voyage AI embeddings.
+            <span className="font-mono text-slate-700">$vectorSearch</span> using 1024-dim Atlas vector embeddings.
             Matches on meaning, not just error codes.
           </p>
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -e
 
-echo "=== PulseBMC Setup ==="
+echo "=== SoCPulse Setup ==="
 
 # Check Node.js for MCP server
 if ! command -v node &>/dev/null; then

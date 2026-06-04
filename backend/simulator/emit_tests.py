@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-PulseBMC Simulator — emits loopback test results to the backend API.
+SoCPulse Simulator — emits loopback test results to the backend API.
 
 Simulates the fleet management host forwarding BMC test results to Atlas.
 All tests are loopback tests (loopback_v1) — one test type, three LED outcomes.
@@ -216,7 +216,7 @@ def make_test_run(
 
 def main():
     parser = argparse.ArgumentParser(
-        description="PulseBMC loopback test simulator",
+        description="SoCPulse loopback test simulator",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__,
     )
@@ -242,7 +242,7 @@ def main():
     for d in devices:
         _get_fault_source(d)
 
-    print(f"PulseBMC Simulator started — {len(devices)} devices, {interval}s interval")
+    print(f"SoCPulse Simulator started — {len(devices)} devices, {interval}s interval")
     if args.burst_failure:
         print(f"  Burst failure: {args.burst_failure} → 100%")
     if args.trending_failure:

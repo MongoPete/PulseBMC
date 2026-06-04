@@ -11,7 +11,7 @@ else
   exit 1
 fi
 
-echo "=== Starting PulseBMC ==="
+echo "=== Starting SoCPulse ==="
 echo ""
 
 # Clear ports 8000 and 3000 before starting — prevents "address already in use" on restart

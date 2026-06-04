@@ -1,10 +1,10 @@
 "use client";
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import { subscribeSimState, controlSim } from "@/lib/simState";
 
 interface Props {
   onAction?: () => void;
-  onSimulatorStateChange?: (running: boolean) => void;
 }
 
 type ScenarioId = "burst" | "trending" | "offline" | "reset";
@@ -22,34 +22,34 @@ const SCENARIOS: Scenario[] = [
   {
     id: "burst",
     label: "Burst Failure — Device 15",
-    what: "Injects 5 back-to-back failures on Device 15 right now.",
-    watch: "Device 15 turns red → open Alerts page → alert auto-created.",
-    accent: "text-red-700 border-slate-200 hover:bg-red-50",
-    leftBorder: "border-l-red-400",
+    what: "Injects 5 consecutive loopback failures on Device 15.",
+    watch: "Device 15 transitions to fault state → Alerts view auto-creates an entry.",
+    accent: "text-slate-700 border-slate-200 hover:bg-slate-50",
+    leftBorder: "border-l-slate-400",
   },
   {
     id: "trending",
-    label: "Trending Failure — Device 7",
+    label: "Trending Fault — Device 7",
     what: "Seeds Device 7 at ~20% failure rate, above the 10% alert threshold.",
-    watch: "Device 7 turns red and a 'high' severity alert fires right away.",
-    accent: "text-amber-700 border-slate-200 hover:bg-amber-50",
-    leftBorder: "border-l-amber-400",
+    watch: "Device 7 enters fault state and a high-severity alert is raised.",
+    accent: "text-slate-700 border-slate-200 hover:bg-slate-50",
+    leftBorder: "border-l-slate-400",
   },
   {
     id: "offline",
-    label: "Offline Buffer (20 s)",
-    what: "Pauses simulator writes for 20 seconds, then auto-flushes to Atlas.",
-    watch: "Feed shows 'buffering…' → then burst of catch-up writes.",
-    accent: "text-blue-700 border-slate-200 hover:bg-blue-50",
-    leftBorder: "border-l-blue-400",
+    label: "Connectivity Loss (20 s)",
+    what: "Suspends telemetry writes for 20 seconds, then auto-flushes to Atlas.",
+    watch: "Live feed shows gap → batch of catch-up writes on reconnect.",
+    accent: "text-slate-700 border-slate-200 hover:bg-slate-50",
+    leftBorder: "border-l-slate-400",
   },
   {
     id: "reset",
-    label: "Reset Fleet to Healthy",
-    what: "Clears all injected failures immediately.",
-    watch: "Red devices return to green.",
-    accent: "text-green-700 border-slate-200 hover:bg-green-50",
-    leftBorder: "border-l-green-400",
+    label: "Restore Fleet",
+    what: "Clears all injected faults and returns all devices to passing state.",
+    watch: "Fault indicators clear across the fleet grid.",
+    accent: "text-slate-700 border-slate-200 hover:bg-slate-50",
+    leftBorder: "border-l-teal-500",
   },
 ];
 
@@ -60,27 +60,21 @@ const ACTIONS: Record<ScenarioId, () => Promise<unknown>> = {
   reset: () => api.demo.reset(),
 };
 
-export default function DemoControls({ onAction, onSimulatorStateChange }: Props) {
+export default function DemoControls({ onAction }: Props) {
   const [loading, setLoading] = useState<ScenarioId | null>(null);
   const [lastRun, setLastRun] = useState<{ id: ScenarioId; ok: boolean; msg: string } | null>(null);
   const [simRunning, setSimRunning] = useState<boolean | null>(null);
   const [simLoading, setSimLoading] = useState(false);
 
   useEffect(() => {
-    api.demo.state().then((s) => {
-      setSimRunning(s.simulator_running);
-      onSimulatorStateChange?.(s.simulator_running);
-    }).catch(() => {});
-  }, [onSimulatorStateChange]);
+    return subscribeSimState(setSimRunning);
+  }, []);
 
   const toggleSimulator = async () => {
     if (simRunning === null) return;
     setSimLoading(true);
     try {
-      const action = simRunning ? "stop" : "start";
-      const res = await api.demo.simulator(action);
-      setSimRunning(res.running);
-      onSimulatorStateChange?.(res.running);
+      await controlSim(simRunning ? "stop" : "start");
       onAction?.();
     } catch { /* ignore */ } finally {
       setSimLoading(false);
@@ -102,7 +96,7 @@ export default function DemoControls({ onAction, onSimulatorStateChange }: Props
   };
 
   return (
-    <div id="demo-controls" className="pt-3">
+    <div id="scenario-controls" className="pt-3">
       {/* Simulator status + pause/resume */}
       <div className="flex items-center justify-between mb-3 pb-3 border-b border-slate-100">
         <div className="flex items-center gap-2 text-xs">
@@ -136,7 +130,7 @@ export default function DemoControls({ onAction, onSimulatorStateChange }: Props
       </div>
 
       <p className="text-xs text-slate-500 mb-3">
-        Each scenario writes directly to Atlas — no terminal commands needed.
+        Each scenario writes directly to Atlas — observe how SoCPulse detects and surfaces faults in real time.
       </p>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
         {SCENARIOS.map((s) => (

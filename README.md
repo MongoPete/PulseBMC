@@ -1,6 +1,6 @@
-# PulseBMC
+# SoCPulse
 
-Hardware health monitoring POC for BMC fleets — powered by MongoDB Atlas, Voyage AI, and LangChain.
+Hardware health monitoring POC for data center operators (SoC / BMC fleets) — powered by MongoDB Atlas, Voyage AI, and LangChain.
 
 Built for a hardware solutions architect who needs to see the MongoDB Atlas value proposition for edge/embedded test data aggregated to the cloud.
 
