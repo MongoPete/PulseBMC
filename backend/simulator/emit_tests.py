@@ -31,6 +31,7 @@ Usage:
 """
 import argparse
 import json
+import os
 import random
 import time
 import sys
@@ -43,6 +44,14 @@ from nvme_adapter import NvmeAdapter
 CONFIG_PATH = Path(__file__).parent / "config.json"
 
 _nvme = NvmeAdapter()
+
+
+def _api_headers() -> dict[str, str]:
+    """Railway sets BACKEND_API_KEY; loopback calls must send it like the Vercel proxy."""
+    key = os.environ.get("BACKEND_API_KEY", "").strip()
+    if key:
+        return {"Authorization": f"Bearer {key}"}
+    return {}
 
 ERROR_CODES = ["LB_TIMEOUT", "CONTINUITY_FAIL", "LOOPBACK_FAIL_TIMING", "SIGNAL_INTEGRITY_ERR", "LB_NO_RESPONSE"]
 COMPONENTS = ["pcie_card_1", "pcie_card_2", "pcie_card_3"]
@@ -255,7 +264,7 @@ def main():
     buffer = []
     buffer_until = time.time() + 30 if args.offline_buffer_sim else 0
 
-    with httpx.Client(base_url=api_url, timeout=10) as client:
+    with httpx.Client(base_url=api_url, timeout=10, headers=_api_headers()) as client:
         while True:
             try:
                 state_resp = client.get("/api/demo/state")

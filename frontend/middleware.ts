@@ -40,6 +40,8 @@ export default auth(async (req) => {
 
   if (pathname.startsWith("/api/setup")) return NextResponse.next();
 
+  if (pathname === "/api/demo/session/stop") return NextResponse.next();
+
   if (pathname.startsWith("/api/proxy")) {
     const isSetupProxy =
       process.env.ALLOW_SETUP === "true" &&

@@ -4,7 +4,9 @@ import { useRouter } from "next/navigation";
 import DeviceGrid from "@/components/DeviceGrid";
 import DemoControls from "@/components/DemoControls";
 import LiveFeed from "@/components/LiveFeed";
+import SimSessionBanner from "@/components/SimSessionBanner";
 import ConceptBar from "@/components/ConceptBar";
+import { isSessionModeEnabled } from "@/lib/simSessionConfig";
 import RuntimeDebugPanel from "@/components/RuntimeDebugPanel";
 import type { LedState } from "@/components/LedIndicator";
 import LedIndicator from "@/components/LedIndicator";
@@ -453,6 +455,7 @@ export default function FleetPage() {
     <div>
       <ConceptBar />
       <main className="max-w-[1400px] mx-auto px-4 py-6">
+        {isSessionModeEnabled() && <SimSessionBanner />}
         {/* Header */}
         <div className="flex items-start justify-between mb-5 gap-4 flex-wrap">
           <div>
@@ -507,7 +510,8 @@ export default function FleetPage() {
           <span className="text-slate-400">· Right-click a device for actions</span>
         </div>
 
-        {/* Scenario Controls (collapsible) */}
+        {/* Scenario Controls (collapsible) — hidden in session mode; use Start live demo banner */}
+        {!isSessionModeEnabled() && (
         <div className="border border-slate-200 rounded-lg overflow-hidden">
           <button
             onClick={() => setDemoOpen((o) => !o)}
@@ -522,6 +526,7 @@ export default function FleetPage() {
             </div>
           )}
         </div>
+        )}
 
         {/* Live Event Feed (collapsible) */}
         <div className="border border-slate-200 rounded-lg overflow-hidden mt-3">

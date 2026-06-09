@@ -25,6 +25,8 @@ Host the **Next.js frontend** on Vercel and the **FastAPI backend** on Railway. 
    | `VOYAGE_API_KEY` | Embeddings for vector search |
    | `ALLOWED_ORIGINS` | `https://demo.yourdomain.com,http://localhost:3000` |
    | `BACKEND_API_KEY` | Long random string — same value on Vercel |
+   | `SIM_SESSION_MODE` | `true` — simulator only runs during explicit browser sessions |
+   | `SIM_LEASE_TIMEOUT_SEC` | `90` — auto-stop if heartbeats missed (optional) |
 
 5. Deploy and confirm `GET https://<railway-url>/health` returns `{"status":"ok"}`.
 6. **Custom domain:** Railway → Settings → Networking → add `api.yourdomain.com` → create CNAME at your DNS provider per Railway instructions.
@@ -50,6 +52,8 @@ cd backend && source .venv/bin/activate && python seed/seed_data.py
    | `DEMO_USER_PASSWORD` | Customer login password |
    | `API_URL` | `https://api.yourdomain.com` |
    | `BACKEND_API_KEY` | Must match Railway |
+   | `NEXT_PUBLIC_SIM_SESSION_MODE` | `true` — shows Start live demo; hides manual simulator controls |
+   | `NEXT_PUBLIC_SIM_IDLE_TIMEOUT_SEC` | `180` — stop after 3 min idle (optional) |
 
 4. Deploy. The app proxies all REST and SSE traffic through `/api/proxy/*` with the backend API key attached server-side.
 5. **Custom domain:** Vercel → Domains → add `demo.yourdomain.com` → add DNS CNAME per Vercel instructions.
@@ -71,6 +75,17 @@ Wait for TLS on both hosts before sharing the customer link.
 - [ ] `BACKEND_API_KEY` set on both Railway and Vercel (server-only)
 - [ ] Unauthenticated users redirected to `/login`; `/api/proxy/*` returns 401
 - [ ] Smoke test: fleet grid, SSE live feed, Explore query, agent chain on alerts
+- [ ] Session mode: simulator stopped by default; Start live demo runs only on Fleet/Alerts; stops on tab hide, idle, or leaving Explore
+
+### Simulator session mode (customer kiosk)
+
+With `SIM_SESSION_MODE=true` (Railway) and `NEXT_PUBLIC_SIM_SESSION_MODE=true` (Vercel):
+
+- Simulator **does not run** until the customer clicks **Start live demo** on Fleet.
+- Session stays active on **Fleet (`/`) and Alerts (`/alerts`)** only.
+- Stops automatically when: browser tab hidden, tab closed, 3 min idle, or navigating to Explore/Architecture.
+- Server auto-stops if heartbeats stop for ~90s (Railway lease sweeper).
+- Manual scenario injection buttons are hidden in session mode.
 
 ## 5. Local development
 

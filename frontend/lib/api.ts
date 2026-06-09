@@ -51,7 +51,28 @@ export const api = {
         offline_buffer: boolean;
         burst_failure_devices: string[];
         trending_failure_devices: string[];
+        session_active?: boolean;
+        session_mode?: boolean;
+        session_id?: string | null;
       }>,
+    sessionStart: () =>
+      apiFetch("/api/demo/session/start", { method: "POST" }) as Promise<{
+        session_id: string;
+        expires_in_sec: number;
+      }>,
+    sessionHeartbeat: (sessionId: string) =>
+      apiFetch("/api/demo/session/heartbeat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ session_id: sessionId }),
+      }),
+    sessionStop: (sessionId: string) =>
+      apiFetch("/api/demo/session/stop", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ session_id: sessionId }),
+      }),
+    sessionStatus: () => apiFetch("/api/demo/session/status"),
     rerun: (deviceId: string) =>
       apiFetch(`/api/demo/rerun/${deviceId}`, { method: "POST" }),
     setFailureMode: (deviceId: string, mode: string) =>

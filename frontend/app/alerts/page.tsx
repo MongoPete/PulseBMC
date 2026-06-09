@@ -7,6 +7,8 @@ import WorkOrderCard from "@/components/WorkOrderCard";
 import RetrievedContextPanel from "@/components/RetrievedContextPanel";
 import LedIndicator from "@/components/LedIndicator";
 import ConceptBar from "@/components/ConceptBar";
+import SimSessionBanner from "@/components/SimSessionBanner";
+import { isSessionModeEnabled } from "@/lib/simSessionConfig";
 import RuntimeDebugPanel from "@/components/RuntimeDebugPanel";
 import { api } from "@/lib/api";
 import { fmtDateTime, fmtRelative } from "@/lib/time";
@@ -271,6 +273,7 @@ export default function AlertsPage() {
   return (
     <main className="max-w-5xl mx-auto px-4 py-6">
       <ConceptBar />
+      {isSessionModeEnabled() && <SimSessionBanner compact />}
       {/* Page header */}
       <div className="flex items-center justify-between mb-5">
         <div>

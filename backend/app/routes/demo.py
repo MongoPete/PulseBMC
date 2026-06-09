@@ -3,9 +3,10 @@ Demo control endpoints — let the presenter trigger scenarios from the browser
 without touching the terminal during a live demo.
 """
 import asyncio
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, HTTPException, Query
+from pydantic import BaseModel
 from app.db import get_db
-from app.services import sim_control
+from app.services import sim_control, sim_session
 from datetime import datetime
 
 router = APIRouter()
@@ -24,9 +25,48 @@ def get_demo_overrides() -> dict:
     return _demo_overrides
 
 
+class SessionIdBody(BaseModel):
+    session_id: str
+
+
+def _reject_scenarios_in_session_mode() -> None:
+    if sim_session.session_mode_enabled():
+        raise HTTPException(status_code=403, detail="Demo scenarios disabled in session mode")
+
+
+@router.post("/demo/session/start")
+async def session_start():
+    if not sim_session.session_mode_enabled():
+        raise HTTPException(status_code=403, detail="Session mode is not enabled")
+    return sim_session.start_session()
+
+
+@router.post("/demo/session/heartbeat")
+async def session_heartbeat(body: SessionIdBody):
+    try:
+        return sim_session.heartbeat(body.session_id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Session not found or expired")
+
+
+@router.post("/demo/session/stop")
+async def session_stop(body: SessionIdBody | None = None):
+    session_id = body.session_id if body else None
+    try:
+        return sim_session.stop_session(session_id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+
+@router.get("/demo/session/status")
+async def session_status():
+    return sim_session.get_status()
+
+
 @router.post("/demo/burst-failure")
 async def trigger_burst_failure(device_id: str = Query("device-015")):
     """Force a device to 100% failure rate — LED goes red, alert fires immediately."""
+    _reject_scenarios_in_session_mode()
     from app.routes.test_runs import notify_sse, _check_and_create_alert
 
     _demo_overrides["burst_failure"].add(device_id)
@@ -71,6 +111,7 @@ async def trigger_burst_failure(device_id: str = Query("device-015")):
 async def trigger_trending_failure(device_id: str = Query("device-007")):
     """Set a device to an elevated failure rate and seed enough failures NOW that the
     alert fires immediately — deterministic, works whether or not the simulator runs."""
+    _reject_scenarios_in_session_mode()
     from app.routes.test_runs import notify_sse, _check_and_create_alert
 
     _demo_overrides["trending_failure"].add(device_id)
@@ -120,6 +161,7 @@ async def trigger_trending_failure(device_id: str = Query("device-007")):
 async def trigger_offline_buffer():
     """Simulate a network blackout — the simulator holds writes, then flushes them all
     at once. Auto-clears after the window so the flush actually happens on its own."""
+    _reject_scenarios_in_session_mode()
     from app.routes.test_runs import notify_sse
 
     _demo_overrides["offline_buffer"] = True
@@ -141,6 +183,7 @@ async def reset_fleet():
     """Clear demo overrides, flush each affected device's recent-run window with passes
     (so the last-N failure rate drops below threshold and the alert can't re-fire),
     resolve open alerts, and push green via SSE."""
+    _reject_scenarios_in_session_mode()
     from app.routes.test_runs import notify_sse, ALERT_WINDOW_RUNS
 
     db = get_db()
@@ -198,6 +241,12 @@ async def reset_fleet():
 async def control_simulator(action: str):
     """Start, stop, or restart the loopback simulator process from the browser."""
     from app.routes.test_runs import notify_sse
+
+    if sim_session.session_mode_enabled() and action in ("start", "restart"):
+        raise HTTPException(
+            status_code=403,
+            detail="Use POST /api/demo/session/start in session mode",
+        )
 
     now = datetime.utcnow().isoformat()
     if action == "start":
@@ -272,6 +321,7 @@ async def set_failure_mode(device_id: str = Query(...), mode: str = Query("none"
 
 @router.get("/demo/state")
 async def get_demo_state():
+    status = sim_session.get_status()
     return {
         "burst_failure_devices": list(_demo_overrides["burst_failure"]),
         "trending_failure_devices": list(_demo_overrides["trending_failure"]),
@@ -279,4 +329,7 @@ async def get_demo_state():
         "simulator_running": sim_control.is_running(),
         "reset_devices": list(_demo_overrides.get("reset_devices", set())),
         "failure_modes": _demo_overrides.get("failure_modes", {}),
+        "session_active": status["active"],
+        "session_mode": status["session_mode"],
+        "session_id": status.get("session_id"),
     }

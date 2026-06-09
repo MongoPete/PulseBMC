@@ -10,6 +10,7 @@ from app.db import ensure_indexes, close_client
 from app.routes import devices, test_runs, alerts, agents, demo, explore, telemetry, setup
 from app.services import sim_control
 from app.services.setup_mode import is_setup_complete
+from app.services import sim_session
 from app.middleware.auth import APIKeyMiddleware
 
 
@@ -20,9 +21,12 @@ def _allowed_origins() -> list[str]:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    await sim_session.start_sweeper()
     if is_setup_complete():
         await ensure_indexes()
     yield
+    await sim_session.stop_sweeper()
+    sim_session.stop_session()
     sim_control.stop()
     if is_setup_complete():
         await close_client()

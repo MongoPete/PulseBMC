@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import { subscribeLiveMessages, subscribeLiveStatus } from "@/lib/liveStream";
 import { subscribeSimState, controlSim } from "@/lib/simState";
+import { isSessionModeEnabled } from "@/lib/simSessionConfig";
 
 interface FeedEvent {
   id: number;
@@ -48,6 +49,7 @@ export default function LiveFeed() {
   const [connected, setConnected] = useState(false);
   const [running, setRunning] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(false);
+  const sessionMode = isSessionModeEnabled();
   const bottomRef = useRef<HTMLDivElement>(null);
   const counterRef = useRef(0);
 
@@ -120,33 +122,37 @@ export default function LiveFeed() {
           </span>
         </span>
         <div className="flex items-center gap-1.5">
-          {running ? (
-            <button
-              onClick={() => control("stop")}
-              disabled={busy}
-              title="Stop the loopback simulator — no new test runs until restarted"
-              className="text-[11px] px-2 py-0.5 rounded border border-rose-700/60 text-rose-300 hover:bg-rose-900/30 transition-colors disabled:opacity-40"
-            >
-              ◼ Stop
-            </button>
-          ) : (
-            <button
-              onClick={() => control("start")}
-              disabled={busy || running === null}
-              title="Start the loopback simulator"
-              className="text-[11px] px-2 py-0.5 rounded border border-emerald-700/60 text-emerald-300 hover:bg-emerald-900/30 transition-colors disabled:opacity-40"
-            >
-              ▶ Start
-            </button>
+          {!sessionMode && (
+            <>
+              {running ? (
+                <button
+                  onClick={() => control("stop")}
+                  disabled={busy}
+                  title="Stop the loopback simulator — no new test runs until restarted"
+                  className="text-[11px] px-2 py-0.5 rounded border border-rose-700/60 text-rose-300 hover:bg-rose-900/30 transition-colors disabled:opacity-40"
+                >
+                  ◼ Stop
+                </button>
+              ) : (
+                <button
+                  onClick={() => control("start")}
+                  disabled={busy || running === null}
+                  title="Start the loopback simulator"
+                  className="text-[11px] px-2 py-0.5 rounded border border-emerald-700/60 text-emerald-300 hover:bg-emerald-900/30 transition-colors disabled:opacity-40"
+                >
+                  ▶ Start
+                </button>
+              )}
+              <button
+                onClick={() => control("restart")}
+                disabled={busy || running === null}
+                title="Restart the loopback simulator"
+                className="text-[11px] px-2 py-0.5 rounded border border-slate-600/60 text-slate-300 hover:bg-slate-700/40 transition-colors disabled:opacity-40"
+              >
+                ⟳ Restart
+              </button>
+            </>
           )}
-          <button
-            onClick={() => control("restart")}
-            disabled={busy || running === null}
-            title="Restart the loopback simulator"
-            className="text-[11px] px-2 py-0.5 rounded border border-slate-600/60 text-slate-300 hover:bg-slate-700/40 transition-colors disabled:opacity-40"
-          >
-            ⟳ Restart
-          </button>
         </div>
       </div>
 

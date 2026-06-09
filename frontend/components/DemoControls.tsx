@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { subscribeSimState, controlSim } from "@/lib/simState";
+import { isSessionModeEnabled } from "@/lib/simSessionConfig";
 
 interface Props {
   onAction?: () => void;
@@ -61,6 +62,7 @@ const ACTIONS: Record<ScenarioId, () => Promise<unknown>> = {
 };
 
 export default function DemoControls({ onAction }: Props) {
+  const sessionMode = isSessionModeEnabled();
   const [loading, setLoading] = useState<ScenarioId | null>(null);
   const [lastRun, setLastRun] = useState<{ id: ScenarioId; ok: boolean; msg: string } | null>(null);
   const [simRunning, setSimRunning] = useState<boolean | null>(null);
@@ -69,6 +71,8 @@ export default function DemoControls({ onAction }: Props) {
   useEffect(() => {
     return subscribeSimState(setSimRunning);
   }, []);
+
+  if (sessionMode) return null;
 
   const toggleSimulator = async () => {
     if (simRunning === null) return;
