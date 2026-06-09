@@ -7,15 +7,33 @@ async function expandLiveFeed(page: import("@playwright/test").Page) {
     await toggle.click();
   }
   await expect(
-    page.getByRole("button", { name: "▶ Start" }).or(page.getByRole("button", { name: "◼ Stop" })),
+    page
+      .getByText("Waiting for events…")
+      .or(page.getByText(/Change Stream → SSE/i))
+      .or(page.getByRole("button", { name: "▶ Start" }))
+      .or(page.getByRole("button", { name: "◼ Stop" }))
+      .first(),
   ).toBeVisible({ timeout: 10_000 });
 }
 
 async function startSimulatorViaApi(request: import("@playwright/test").APIRequestContext) {
-  const res = await request.post("/api/proxy/demo/simulator/restart");
-  expect(res.ok()).toBeTruthy();
-  const body = await res.json();
-  expect(body.running).toBe(true);
+  const stateRes = await request.get("/api/proxy/demo/state");
+  expect(stateRes.ok()).toBeTruthy();
+  const state = await stateRes.json();
+
+  if (state.session_mode) {
+    const res = await request.post("/api/proxy/demo/session/start");
+    expect(res.ok()).toBeTruthy();
+  } else {
+    const res = await request.post("/api/proxy/demo/simulator/restart");
+    expect(res.ok()).toBeTruthy();
+    const body = await res.json();
+    expect(body.running).toBe(true);
+  }
+
+  const after = await request.get("/api/proxy/demo/state");
+  expect(after.ok()).toBeTruthy();
+  expect((await after.json()).simulator_running).toBe(true);
 }
 
 test.describe("Fleet live demo", () => {
@@ -53,7 +71,12 @@ test.describe("Fleet live demo", () => {
     await expandLiveFeed(page);
     await startSimulatorViaApi(request);
 
-    await expect(page.getByText(/simulator running/i)).toBeVisible({ timeout: 15_000 });
+    await expect
+      .poll(async () => {
+        const state = await request.get("/api/proxy/demo/state");
+        return state.ok() && (await state.json()).simulator_running === true;
+      })
+      .toBeTruthy();
 
     await expect
       .poll(
@@ -68,7 +91,7 @@ test.describe("Fleet live demo", () => {
               t.includes("FAIL"),
           );
           const amberCells = await page.locator("#device-grid .amber-blink").count();
-          const sseOk = await page.getByText("SSE connected", { exact: true }).isVisible().catch(() => false);
+          const sseOk = await page.getByText(/Change Stream → SSE/i).isVisible().catch(() => false);
           return sseOk || hasRunEvent || amberCells > 0;
         },
         { timeout: 45_000, intervals: [500, 1000, 2000] },

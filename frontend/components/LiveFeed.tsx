@@ -2,7 +2,9 @@
 import { useEffect, useRef, useState } from "react";
 import { subscribeLiveMessages, subscribeLiveStatus } from "@/lib/liveStream";
 import { subscribeSimState, controlSim } from "@/lib/simState";
-import { isSessionModeEnabled } from "@/lib/simSessionConfig";
+import { useSessionMode } from "@/lib/sessionMode";
+import ChangeStreamLiveLabel from "@/components/ChangeStreamLiveLabel";
+import { fmtClock } from "@/lib/time";
 
 interface FeedEvent {
   id: number;
@@ -49,7 +51,7 @@ export default function LiveFeed() {
   const [connected, setConnected] = useState(false);
   const [running, setRunning] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(false);
-  const sessionMode = isSessionModeEnabled();
+  const sessionMode = useSessionMode();
   const bottomRef = useRef<HTMLDivElement>(null);
   const counterRef = useRef(0);
 
@@ -71,10 +73,11 @@ export default function LiveFeed() {
   useEffect(() => {
     const unsubStatus = subscribeLiveStatus(setConnected);
     const unsubMsg = subscribeLiveMessages((payload) => {
-      if (payload.connected) return; // handshake ping
+      if (payload.connected) return;
 
-      const now = new Date();
-      const ts = now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+      const ts = payload.started_at
+        ? fmtClock(payload.started_at)
+        : new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
 
       setEvents((prev) => {
         const next = [
@@ -193,12 +196,7 @@ export default function LiveFeed() {
         <span className="text-[10px] text-slate-600">
           {events.length} event{events.length !== 1 ? "s" : ""} · last {MAX_EVENTS} shown
         </span>
-        <span className="flex items-center gap-1 text-[10px] text-slate-600">
-          <span
-            className={`w-1.5 h-1.5 rounded-full ${connected ? "bg-green-400" : "bg-gray-600"}`}
-          />
-          {connected ? "SSE connected" : "connecting…"}
-        </span>
+        <ChangeStreamLiveLabel connected={connected} />
       </div>
     </div>
   );

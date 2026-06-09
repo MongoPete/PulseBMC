@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { subscribeSimState, controlSim } from "@/lib/simState";
-import { isSessionModeEnabled } from "@/lib/simSessionConfig";
+import { useSessionMode } from "@/lib/sessionMode";
 
 interface Props {
   onAction?: () => void;
@@ -62,7 +62,7 @@ const ACTIONS: Record<ScenarioId, () => Promise<unknown>> = {
 };
 
 export default function DemoControls({ onAction }: Props) {
-  const sessionMode = isSessionModeEnabled();
+  const sessionMode = useSessionMode();
   const [loading, setLoading] = useState<ScenarioId | null>(null);
   const [lastRun, setLastRun] = useState<{ id: ScenarioId; ok: boolean; msg: string } | null>(null);
   const [simRunning, setSimRunning] = useState<boolean | null>(null);

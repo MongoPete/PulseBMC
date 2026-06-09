@@ -10,6 +10,7 @@ import {
   idleTimeoutMs,
   isSessionAllowedPath,
   isSessionModeEnabled,
+  setBackendSessionMode,
 } from "./simSessionConfig";
 
 export type SimSessionPhase = "idle" | "starting" | "active" | "stopping";
@@ -131,8 +132,21 @@ async function sendHeartbeat(sessionId: string) {
 }
 
 export async function startSimSession(): Promise<void> {
-  if (!isSessionModeEnabled()) return;
   if (state.phase === "starting" || state.phase === "active") return;
+
+  let sessionMode = isSessionModeEnabled();
+  if (!sessionMode) {
+    try {
+      const demo = await api.demo.state();
+      if (demo.session_mode) {
+        setBackendSessionMode(true);
+        sessionMode = true;
+      }
+    } catch {
+      /* fall through */
+    }
+  }
+  if (!sessionMode) return;
 
   setState({ phase: "starting", lastStopReason: null });
   try {

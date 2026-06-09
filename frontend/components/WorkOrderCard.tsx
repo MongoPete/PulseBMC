@@ -92,6 +92,18 @@ export default function WorkOrderCard({ wo, deviceInfo }: { wo: WorkOrder; devic
         </div>
       )}
 
+      {/* Required parts */}
+      {wo.required_parts.length > 0 && (
+        <div className="px-5 pb-4 border-t border-slate-100 pt-4">
+          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">Required Parts</p>
+          <ul className="space-y-1">
+            {wo.required_parts.map((part, i) => (
+              <li key={i} className="text-sm text-slate-700 font-mono">{part}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       {/* Safety notes */}
       {wo.safety_notes.length > 0 && (
         <div className="mx-5 mb-4 px-3 py-2 rounded-lg bg-amber-50 border border-amber-200 space-y-1">

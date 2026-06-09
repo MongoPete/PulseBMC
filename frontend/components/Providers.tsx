@@ -2,11 +2,14 @@
 
 import { SessionProvider } from "next-auth/react";
 import SimSessionProvider from "@/components/SimSessionProvider";
+import { SessionModeProvider } from "@/lib/sessionMode";
 
 export default function Providers({ children }: { children: React.ReactNode }) {
   return (
     <SessionProvider>
-      <SimSessionProvider>{children}</SimSessionProvider>
+      <SessionModeProvider>
+        <SimSessionProvider>{children}</SimSessionProvider>
+      </SessionModeProvider>
     </SessionProvider>
   );
 }

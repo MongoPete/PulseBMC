@@ -17,7 +17,7 @@ export default function LedIndicator({ state, size = "md", label }: Props) {
     green: `${base} bg-green-500 shadow-[0_0_5px_1px_rgba(34,197,94,0.45)]`,
     flashing_green: `${base} bg-green-500 shadow-[0_0_5px_1px_rgba(34,197,94,0.45)] animate-pulse`,
     amber: `${base} bg-amber-400 amber-blink`,
-    red: `${base} bg-red-600 shadow-[0_0_4px_1px_rgba(220,38,38,0.4)]`,
+    red: `${base} bg-red-600 shadow-[0_0_4px_1px_rgba(220,38,38,0.4)] failure-pulse`,
     off: `${base} bg-slate-300`,
   };
 

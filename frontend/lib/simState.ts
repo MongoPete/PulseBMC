@@ -11,6 +11,8 @@
  * immediately, and one shared poll reconciles with the backend.
  */
 import { api } from "./api";
+import { isSessionModeEnabled } from "./simSessionConfig";
+import { startSimSession, stopSimSession } from "./simSession";
 
 type Listener = (running: boolean | null) => void;
 
@@ -47,6 +49,17 @@ export function setSimRunning(next: boolean) {
 }
 
 export async function controlSim(action: "start" | "stop" | "restart"): Promise<boolean> {
+  if (isSessionModeEnabled()) {
+    if (action === "stop") {
+      await stopSimSession("manual");
+      return false;
+    }
+    if (action === "restart") {
+      await stopSimSession("manual");
+    }
+    await startSimSession();
+    return true;
+  }
   const res = await api.demo.simulator(action);
   setSimRunning(res.running);
   return res.running;

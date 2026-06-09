@@ -41,3 +41,18 @@ body {
 .amber-blink {
   animation: amber-blink 1.4s ease-in-out infinite;
 }
+
+/* Persistent pulse on active failure — readable from across the room */
+@keyframes failure-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.55);
+  }
+  50% {
+    box-shadow: 0 0 0 5px rgba(220, 38, 38, 0);
+  }
+}
+
+.failure-pulse {
+  animation: failure-pulse 2s ease-in-out infinite;
+}

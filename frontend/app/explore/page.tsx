@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { JsonLight, SqlLight } from "@/components/SyntaxHighlight";
+import ConceptBar from "@/components/ConceptBar";
 import { api } from "@/lib/api";
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -453,6 +454,8 @@ export default function ExplorePage() {
   ];
 
   return (
+    <>
+      <ConceptBar />
     <main className="max-w-5xl mx-auto px-4 py-6">
       {/* Header */}
       <div className="flex items-start justify-between mb-5 gap-4 flex-wrap">
@@ -688,5 +691,6 @@ export default function ExplorePage() {
 
       {!result && <div id="query-explainer" className="hidden" />}
     </main>
+    </>
   );
 }

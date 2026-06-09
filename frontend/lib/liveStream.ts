@@ -18,6 +18,7 @@ export interface LivePayload {
   status?: string;
   event_type?: string;
   message?: string;
+  started_at?: string;
 }
 
 type MessageListener = (payload: LivePayload) => void;

@@ -52,7 +52,7 @@ cd backend && source .venv/bin/activate && python seed/seed_data.py
    | `DEMO_USER_PASSWORD` | Customer login password |
    | `API_URL` | `https://api.yourdomain.com` |
    | `BACKEND_API_KEY` | Must match Railway |
-   | `NEXT_PUBLIC_SIM_SESSION_MODE` | `true` — shows Start live demo; hides manual simulator controls |
+   | `NEXT_PUBLIC_SIM_SESSION_MODE` | `true` — shows Start live demo; hides manual simulator controls (optional if Railway sets `SIM_SESSION_MODE` — UI auto-detects via `/api/demo/state`) |
    | `NEXT_PUBLIC_SIM_IDLE_TIMEOUT_SEC` | `180` — stop after 3 min idle (optional) |
 
 4. Deploy. The app proxies all REST and SSE traffic through `/api/proxy/*` with the backend API key attached server-side.

@@ -1,6 +1,12 @@
-/** Session mode flag — set NEXT_PUBLIC_SIM_SESSION_MODE=true on Vercel for customer demos. */
+/** Session mode flag — env and/or backend demo/state.session_mode. */
+let backendSessionMode = false;
+
+export function setBackendSessionMode(enabled: boolean) {
+  backendSessionMode = enabled;
+}
+
 export function isSessionModeEnabled(): boolean {
-  return process.env.NEXT_PUBLIC_SIM_SESSION_MODE === "true";
+  return process.env.NEXT_PUBLIC_SIM_SESSION_MODE === "true" || backendSessionMode;
 }
 
 export const SESSION_ALLOWED_PATHS = ["/", "/alerts"];

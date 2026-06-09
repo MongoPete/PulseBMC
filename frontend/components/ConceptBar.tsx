@@ -18,12 +18,12 @@ const STATIC_CARDS: ConceptCard[] = [
 ];
 
 export default function ConceptBar() {
-  const [visible, setVisible] = useState(false);
+  const [visible, setVisible] = useState(true);
   const [counts, setCounts] = useState<Record<string, number>>({});
 
   useEffect(() => {
     const stored = localStorage.getItem("conceptbar-visible");
-    if (stored === "true") setVisible(true);
+    if (stored === "false") setVisible(false);
 
     Promise.allSettled([
       api.devices(),

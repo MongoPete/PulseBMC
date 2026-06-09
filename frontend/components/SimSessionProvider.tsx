@@ -2,17 +2,18 @@
 
 import { useEffect } from "react";
 import { usePathname } from "next/navigation";
-import { isSessionModeEnabled } from "@/lib/simSessionConfig";
+import { useSessionMode } from "@/lib/sessionMode";
 import { onRouteChange } from "@/lib/simSession";
 
 /** Wires pathname + session route guards when session mode is enabled. */
 export default function SimSessionProvider({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const sessionMode = useSessionMode();
 
   useEffect(() => {
-    if (!isSessionModeEnabled()) return;
+    if (!sessionMode) return;
     onRouteChange(pathname);
-  }, [pathname]);
+  }, [pathname, sessionMode]);
 
   return <>{children}</>;
 }

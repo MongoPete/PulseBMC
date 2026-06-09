@@ -8,12 +8,14 @@ import RetrievedContextPanel from "@/components/RetrievedContextPanel";
 import LedIndicator from "@/components/LedIndicator";
 import ConceptBar from "@/components/ConceptBar";
 import SimSessionBanner from "@/components/SimSessionBanner";
-import { isSessionModeEnabled } from "@/lib/simSessionConfig";
+import { useSessionMode } from "@/lib/sessionMode";
+import ChangeStreamLiveLabel from "@/components/ChangeStreamLiveLabel";
 import RuntimeDebugPanel from "@/components/RuntimeDebugPanel";
 import { api } from "@/lib/api";
 import { fmtDateTime, fmtRelative } from "@/lib/time";
 import { trackedTimeout } from "@/lib/runtimeDebug";
-import { subscribeLiveMessages } from "@/lib/liveStream";
+import { subscribeLiveMessages, subscribeLiveStatus } from "@/lib/liveStream";
+import { fmtClock } from "@/lib/time";
 
 interface Alert {
   id: string;
@@ -104,6 +106,7 @@ const SEVERITY_META: Record<string, { border: string; bg: string; badge: string;
 };
 
 export default function AlertsPage() {
+  const sessionMode = useSessionMode();
   const searchParams = useSearchParams();
   const targetDeviceId = searchParams.get("device_id");
   const autoTriggeredRef = useRef(false);
@@ -120,6 +123,7 @@ export default function AlertsPage() {
   const [freshResultIds, setFreshResultIds] = useState<Set<string>>(new Set());
   const [latestRuns, setLatestRuns] = useState<Record<string, LatestFailRun>>({});
   const [lastCapture, setLastCapture] = useState<{ msg: string; ts: string } | null>(null);
+  const [sseConnected, setSseConnected] = useState(false);
   const [newAlertIds, setNewAlertIds] = useState<Set<string>>(new Set());
   const knownIds = useRef<Set<string>>(new Set());
   const lastRefreshAt = useRef<number>(0);
@@ -214,9 +218,12 @@ export default function AlertsPage() {
   }, [refresh]);
 
   useEffect(() => {
-    return subscribeLiveMessages((payload) => {
+    const unsubStatus = subscribeLiveStatus(setSseConnected);
+    const unsubMsg = subscribeLiveMessages((payload) => {
       if (payload.connected) return;
-      const ts = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+      const ts = payload.started_at
+        ? fmtClock(payload.started_at)
+        : new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
       if (payload.event_type === "alert") {
         setLastCapture({ msg: payload.message || `Alert fired on ${payload.device_id}`, ts });
         if (Date.now() - lastRefreshAt.current > 3000) refresh();
@@ -226,6 +233,10 @@ export default function AlertsPage() {
         setLastCapture({ msg: `Loopback captured on ${payload.device_id}`, ts });
       }
     });
+    return () => {
+      unsubStatus();
+      unsubMsg();
+    };
   }, [refresh]);
 
   const runChain = async (alert: Alert, forceRefresh = false) => {
@@ -273,7 +284,7 @@ export default function AlertsPage() {
   return (
     <main className="max-w-5xl mx-auto px-4 py-6">
       <ConceptBar />
-      {isSessionModeEnabled() && <SimSessionBanner compact />}
+      {sessionMode && <SimSessionBanner compact />}
       {/* Page header */}
       <div className="flex items-center justify-between mb-5">
         <div>
@@ -310,10 +321,7 @@ export default function AlertsPage() {
 
       {/* Live capture indicator */}
       <div className="flex items-center gap-2 mb-5 text-xs">
-        <span className="flex items-center gap-1.5" style={{ color: "#009999" }}>
-          <span className="w-1.5 h-1.5 rounded-full animate-pulse inline-block" style={{ background: "#009999" }} />
-          Live
-        </span>
+        <ChangeStreamLiveLabel connected={sseConnected} compact />
         <span className="text-slate-400">·</span>
         <span className="text-slate-500 font-mono truncate">
           {lastCapture ? (

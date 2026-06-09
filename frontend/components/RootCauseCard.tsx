@@ -71,6 +71,21 @@ export default function RootCauseCard({ rca, animate }: { rca: RootCause; animat
         </div>
       )}
 
+      {/* Alternative hypotheses */}
+      {rca.alternative_hypotheses.length > 0 && (
+        <div className="px-5 pb-4 border-t border-slate-100 pt-4">
+          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-3">Alternative Hypotheses</p>
+          <ul className="space-y-2">
+            {rca.alternative_hypotheses.map((h, i) => (
+              <li key={i} className="flex gap-2.5 leading-relaxed text-sm text-slate-600">
+                <span className="text-slate-300 shrink-0">{i + 1}.</span>
+                {h}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       {/* Next steps */}
       {rca.next_diagnostic_steps.length > 0 && (
         <div className="px-5 pb-5 border-t border-slate-100 pt-4">

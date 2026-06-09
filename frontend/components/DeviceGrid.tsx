@@ -37,7 +37,7 @@ const STATE_STYLES: Record<LedState, { border: string; bg: string; dot: string }
   green:         { border: "border-slate-200",  bg: "bg-white",        dot: "bg-green-500" },
   flashing_green:{ border: "border-slate-200",  bg: "bg-white",        dot: "bg-green-500 animate-pulse" },
   amber:         { border: "border-amber-300",  bg: "bg-amber-50",     dot: "bg-amber-400 amber-blink" },
-  red:           { border: "border-red-300",    bg: "bg-red-50",       dot: "bg-red-600" },
+  red:           { border: "border-red-300",    bg: "bg-red-50",       dot: "bg-red-600 failure-pulse" },
   off:           { border: "border-slate-200",  bg: "bg-slate-50",     dot: "bg-slate-300" },
 };
 
@@ -98,7 +98,7 @@ export default function DeviceGrid({ devices, liveStates, pulses = {}, onDeviceC
               )}
 
               {/* Status dot */}
-              <span className={`w-3 h-3 rounded-full shrink-0 ${style.dot}`} />
+              <span className={`w-4 h-4 rounded-full shrink-0 ${style.dot}`} />
 
               {/* Coordinate label */}
               <span className="text-[10px] font-mono text-slate-600 leading-tight text-center">
@@ -109,7 +109,7 @@ export default function DeviceGrid({ devices, liveStates, pulses = {}, onDeviceC
               {hasLatch && (
                 <span
                   className="absolute top-1 right-1 text-[8px] text-amber-600 font-bold leading-none"
-                  title={`${device.latched_failures!.length} latched failure${device.latched_failures!.length !== 1 ? "s" : ""} — click to inspect`}
+                  title={`${device.latched_failures!.length} operator-latched failure${device.latched_failures!.length !== 1 ? "s" : ""} — core passed last test but failure pinned until cleared`}
                 >
                   ⚑
                 </span>

@@ -6,7 +6,7 @@ import DemoControls from "@/components/DemoControls";
 import LiveFeed from "@/components/LiveFeed";
 import SimSessionBanner from "@/components/SimSessionBanner";
 import ConceptBar from "@/components/ConceptBar";
-import { isSessionModeEnabled } from "@/lib/simSessionConfig";
+import { useSessionMode } from "@/lib/sessionMode";
 import RuntimeDebugPanel from "@/components/RuntimeDebugPanel";
 import type { LedState } from "@/components/LedIndicator";
 import LedIndicator from "@/components/LedIndicator";
@@ -317,6 +317,7 @@ function DeviceDrawer({
 
 export default function FleetPage() {
   const router = useRouter();
+  const sessionMode = useSessionMode();
   const [devices, setDevices] = useState<Device[]>([]);
   const [liveStates, setLiveStates] = useState<Record<string, LedState>>({});
   const [pulses, setPulses] = useState<Record<string, number>>({});
@@ -455,7 +456,7 @@ export default function FleetPage() {
     <div>
       <ConceptBar />
       <main className="max-w-[1400px] mx-auto px-4 py-6">
-        {isSessionModeEnabled() && <SimSessionBanner />}
+        {sessionMode && <SimSessionBanner />}
         {/* Header */}
         <div className="flex items-start justify-between mb-5 gap-4 flex-wrap">
           <div>
@@ -493,25 +494,32 @@ export default function FleetPage() {
           )}
         </div>
 
-        {/* Legend */}
-        <div className="flex items-center gap-5 text-xs text-slate-500 mb-6">
+        {/* Legend — transient vs sticky vs operator-latched (Aaron) */}
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-slate-500 mb-6">
           <span className="flex items-center gap-1.5">
-            <span className="w-2.5 h-2.5 rounded-full bg-green-500 inline-block" /> Healthy
+            <span className="w-3 h-3 rounded-full bg-green-500 inline-block" /> Healthy
           </span>
           <span className="flex items-center gap-1.5">
-            <span className="w-2.5 h-2.5 rounded-full bg-amber-400 amber-blink inline-block" /> Testing
+            <span className="w-3 h-3 rounded-full bg-amber-400 amber-blink inline-block" /> Testing (live cycle)
           </span>
           <span className="flex items-center gap-1.5">
-            <span className="w-2.5 h-2.5 rounded-full bg-red-600 inline-block" /> Failure
+            <span className="w-3 h-3 rounded-full bg-red-600 failure-pulse inline-block" /> Transient fail
           </span>
           <span className="flex items-center gap-1.5">
-            <span className="w-2.5 h-2.5 rounded-full bg-slate-300 inline-block" /> Offline
+            <span className="relative w-3 h-3 inline-block">
+              <span className="w-3 h-3 rounded-full bg-green-500 inline-block" />
+              <span className="absolute -top-0.5 -right-1 text-[7px] text-amber-600 font-bold">⚑</span>
+            </span>
+            Latched pass — prior fail pinned until cleared
           </span>
-          <span className="text-slate-400">· Right-click a device for actions</span>
+          <span className="flex items-center gap-1.5">
+            <span className="w-3 h-3 rounded-full bg-slate-300 inline-block" /> Offline / isolated
+          </span>
+          <span className="text-slate-400">· Sticky mode (sim): hardware latches red until reset · Right-click for actions</span>
         </div>
 
         {/* Scenario Controls (collapsible) — hidden in session mode; use Start live demo banner */}
-        {!isSessionModeEnabled() && (
+        {!sessionMode && (
         <div className="border border-slate-200 rounded-lg overflow-hidden">
           <button
             onClick={() => setDemoOpen((o) => !o)}

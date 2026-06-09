@@ -293,7 +293,7 @@ export default function LoginPage() {
                 <div className="mt-4 space-y-1.5">
                   <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide">After sign in</p>
                   {[
-                    { dot: "bg-green-500", label: "Fleet Overview", sub: "live LED grid, device drawer" },
+                    { dot: "bg-green-500", label: "Fleet Overview", sub: "click Start live demo, then watch the LED grid pulse" },
                     { dot: "bg-red-500", label: "Open Alerts", sub: "fault analysis + work orders" },
                     { dot: "bg-slate-300", label: "Architecture", sub: "schema + data flow diagrams" },
                     { dot: "bg-slate-300", label: "Explore", sub: "live query browser" },

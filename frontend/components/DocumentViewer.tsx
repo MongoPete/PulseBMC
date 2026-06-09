@@ -48,7 +48,7 @@ export default function DocumentViewer({ doc, title = "Live MongoDB Document" }:
   }
 
   return (
-    <div className="border border-gray-700 rounded-lg overflow-hidden">
+    <div id="doc-viewer" className="border border-gray-700 rounded-lg overflow-hidden">
       <button
         onClick={() => setOpen((o) => !o)}
         className="w-full flex items-center justify-between px-4 py-2.5 bg-gray-900 hover:bg-gray-800 text-sm transition-colors"

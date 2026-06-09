@@ -11,6 +11,9 @@ import RuntimeDebugPanel from "@/components/RuntimeDebugPanel";
 import { api } from "@/lib/api";
 import { fmtTime, fmtDateTime, fmtRelative } from "@/lib/time";
 import { JsonLight } from "@/components/SyntaxHighlight";
+import DocumentViewer from "@/components/DocumentViewer";
+import ConceptBar from "@/components/ConceptBar";
+import ChangeStreamLiveLabel from "@/components/ChangeStreamLiveLabel";
 import { trackedInterval, trackedTimeout } from "@/lib/runtimeDebug";
 import { subscribeLiveMessages, subscribeLiveStatus } from "@/lib/liveStream";
 
@@ -120,7 +123,6 @@ export default function DevicePage() {
   const [ledState, setLedState] = useState<LedState>("green");
   const [sseConnected, setSseConnected] = useState(false);
   const [expandedRun, setExpandedRun] = useState<string | null>(null);
-  const [rawDataOpen, setRawDataOpen] = useState(false);
   const [smartOpen, setSmartOpen] = useState(false);
   const [selectedCell, setSelectedCell] = useState<HoveredCell | null>(null);
   const [sweepIdx, setSweepIdx] = useState(0);
@@ -218,6 +220,8 @@ export default function DevicePage() {
   }, [ledState, sweepIdx, components]);
 
   return (
+    <>
+      <ConceptBar />
     <main className="max-w-7xl mx-auto px-4 py-6">
       {/* Breadcrumb */}
       <div className="flex items-center gap-2 text-sm text-slate-400 mb-4">
@@ -249,14 +253,7 @@ export default function DevicePage() {
           </div>
         </div>
         <div id="sse-badge" className="flex items-center gap-2 text-xs">
-          <span className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs ${
-            sseConnected
-              ? "border-green-200 text-green-700 bg-green-50"
-              : "border-slate-200 text-slate-500 bg-white"
-          }`}>
-            <span className={`w-1.5 h-1.5 rounded-full ${sseConnected ? "bg-green-500 animate-pulse" : "bg-slate-300"}`} />
-            {sseConnected ? "Live" : "Connecting…"}
-          </span>
+          <ChangeStreamLiveLabel connected={sseConnected} compact />
         </div>
       </div>
 
@@ -560,20 +557,20 @@ export default function DevicePage() {
               )}
             </div>
 
-            {/* Legend */}
+            {/* Legend — sticky hardware vs operator latch vs transient */}
             <div className="flex items-center flex-wrap gap-x-5 gap-y-1 mt-3 pt-3 border-t border-slate-100 text-[11px] text-slate-500">
               <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-green-500 inline-block" /> Pass</span>
-              <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-amber-400 inline-block" /> Testing</span>
-              <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-red-500 inline-block" /> Fail</span>
-              <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-red-800 border-l-2 border-red-700 inline-block rounded-sm" /> Latched</span>
+              <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-amber-400 amber-blink inline-block" /> Testing (sweep)</span>
+              <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-red-500 failure-pulse inline-block" /> Transient fail</span>
+              <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-red-800 border-l-2 border-red-700 inline-block rounded-sm" /> Sticky fail (sim latches red)</span>
               <span className="flex items-center gap-1.5">
                 <span className="relative w-2.5 h-2.5 inline-block">
                   <span className="w-2.5 h-2.5 rounded-full bg-green-500 inline-block" />
                   <span className="absolute -top-0.5 -right-1 text-[6px] text-amber-600 font-bold">⚑</span>
                 </span>
-                <span className="ml-1">Latched pass (⚑)</span>
+                <span className="ml-1">Latched pass — operator pinned prior fail</span>
               </span>
-              <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-amber-400 inline-block" /> Corrupt</span>
+              <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-amber-400 inline-block" /> Corrupt (silent mode)</span>
               {latestRun?.failure_mode && (
                 <span className="ml-auto text-amber-600 font-medium capitalize">{latestRun.failure_mode} mode</span>
               )}
@@ -722,20 +719,7 @@ export default function DevicePage() {
           {/* Raw document (progressive disclosure) */}
           {latestRun && (
             <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
-              <button
-                onClick={() => setRawDataOpen((o) => !o)}
-                className="w-full flex items-center justify-between px-4 py-3 text-xs text-slate-600 hover:bg-slate-50 transition-colors"
-              >
-                <span className="font-medium">Raw MongoDB Document</span>
-                <span className="text-slate-400">{rawDataOpen ? "▾ hide" : "▸ show"}</span>
-              </button>
-              {rawDataOpen && (
-                <div id="doc-viewer" className="border-t border-slate-100">
-                  <pre className="text-xs bg-slate-50 p-4 overflow-auto max-h-96 font-mono leading-relaxed">
-                    <JsonLight code={JSON.stringify(latestRun, null, 2)} />
-                  </pre>
-                </div>
-              )}
+              <DocumentViewer doc={latestRun as unknown as Record<string, unknown>} title="Live test_run document (≈ SQL row + embedded JSON)" />
             </div>
           )}
         </div>
@@ -751,5 +735,6 @@ export default function DevicePage() {
         }}
       />
     </main>
+    </>
   );
 }
