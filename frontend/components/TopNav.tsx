@@ -1,9 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
+import { signOut } from "next-auth/react";
 import LiveClock from "@/components/LiveClock";
-import { signOut } from "@/components/AuthGate";
 
 // Siemens corporate dark (#000028) header — matches TeamCenter / siemens.com nav
 const SIEMENS_DARK = "#000028";
@@ -12,13 +12,11 @@ const MONGODB_GREEN = "#00ED64";
 
 export default function TopNav() {
   const pathname = usePathname();
-  const router = useRouter();
 
-  if (pathname === "/login") return null;
+  if (pathname === "/login" || pathname === "/setup") return null;
 
   const onSignOut = () => {
-    signOut();
-    router.replace("/login");
+    signOut({ callbackUrl: "/login" });
   };
 
   const navLink = (href: string, label: string, id?: string) => {

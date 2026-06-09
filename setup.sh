@@ -30,12 +30,28 @@ if [ -z "$PYTHON_BIN" ]; then
   exit 1
 fi
 
-# Create backend .env from example if not present
+# Create backend .env from example if not present (empty keys — use setup wizard to fill)
 if [ ! -f backend/.env ]; then
   cp backend/.env.example backend/.env
-  echo "[!] Created backend/.env from .env.example — fill in ATLAS_URI, OPENAI_API_KEY, VOYAGE_API_KEY before running."
+  echo "[!] Created backend/.env — use http://localhost:3000/setup after ./start.sh"
 else
   echo "[✓] backend/.env already exists"
+fi
+
+# Create frontend .env.local from example if not present
+if [ ! -f frontend/.env.local ]; then
+  cp frontend/.env.example frontend/.env.local
+  if command -v openssl &>/dev/null; then
+    SECRET=$(openssl rand -base64 32)
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+      sed -i '' "s|^AUTH_SECRET=.*|AUTH_SECRET=${SECRET}|" frontend/.env.local
+    else
+      sed -i "s|^AUTH_SECRET=.*|AUTH_SECRET=${SECRET}|" frontend/.env.local
+    fi
+  fi
+  echo "[!] Created frontend/.env.local — setup wizard will fill login credentials"
+else
+  echo "[✓] frontend/.env.local already exists"
 fi
 
 # Backend virtual environment
@@ -63,6 +79,9 @@ echo ""
 echo "=== Setup complete ==="
 echo ""
 echo "Next steps:"
-echo "  1. Edit backend/.env with your credentials"
-echo "  2. Run: ./start.sh"
-echo "  3. Run: cd backend && source .venv/bin/activate && python seed/seed_data.py"
+echo "  1. Run: ./start.sh"
+echo "  2. Open http://localhost:3000/setup and paste your Atlas + AI keys"
+echo "  3. Restart ./start.sh, seed the database, then sign in at /login"
+echo ""
+echo "Manual alternative: edit backend/.env and frontend/.env.local directly."
+echo "Customer deployment: see DEPLOYMENT.md"

@@ -141,13 +141,27 @@ Collection: test_runs                 Table: test_runs
 - OpenAI API key
 - Voyage AI API key
 
-### One-time setup
+### Quick start (setup wizard)
 
 ```bash
 git clone <repo>
 cd PulseBMC
 ./setup.sh
+./start.sh
 ```
+
+Open **http://localhost:3000/setup** and paste your credentials:
+
+| Field | What it is (SQL mental model) |
+|-------|-------------------------------|
+| `ATLAS_URI` | MongoDB connection string (≈ SQL server + database name) |
+| `OPENAI_API_KEY` | LLM for diagnostic agents |
+| `VOYAGE_API_KEY` | Embeddings for vector search (≈ semantic full-text index) |
+| Demo login | Dashboard sign-in (separate from Atlas) |
+
+The wizard writes `backend/.env` and `frontend/.env.local` on disk — keys are never stored in the browser. Restart `./start.sh`, seed the database from the setup page, then sign in.
+
+### Manual setup (alternative)
 
 Then edit `backend/.env`:
 ```

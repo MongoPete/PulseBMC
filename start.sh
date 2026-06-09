@@ -1,14 +1,16 @@
 #!/usr/bin/env bash
 set -e
 
+# Enable local setup wizard (never used on Vercel/Railway)
+export ALLOW_SETUP=true
+
 # Load env vars so all subprocesses inherit them
 if [ -f backend/.env ]; then
   set -a
   source backend/.env
   set +a
 else
-  echo "ERROR: backend/.env not found. Run ./setup.sh first."
-  exit 1
+  echo "[!] backend/.env not found — open http://localhost:3000/setup after services start"
 fi
 
 echo "=== Starting SoCPulse ==="
@@ -27,8 +29,7 @@ done
 echo "      Ports clear."
 echo ""
 
-# 1. FastAPI backend — also owns the loopback simulator process, which it
-#    auto-starts on boot and exposes Start/Stop/Restart controls for in the UI.
+# 1. FastAPI backend
 echo "[1/2] Starting FastAPI backend on http://localhost:8000 ..."
 cd backend
 source .venv/bin/activate
@@ -47,6 +48,7 @@ echo "      Frontend PID: $FRONTEND_PID"
 
 echo ""
 echo "=== All services running ==="
+echo "  Setup:      http://localhost:3000/setup  (first run — paste Atlas + AI keys)"
 echo "  Dashboard:  http://localhost:3000"
 echo "  API docs:   http://localhost:8000/docs"
 echo ""
@@ -57,7 +59,6 @@ cleanup() {
   echo ''
   echo 'Stopping...'
   kill $BACKEND_PID $FRONTEND_PID 2>/dev/null || true
-  # Kill the backend-managed simulator and any lingering port owners
   pkill -f "simulator/emit_tests.py" 2>/dev/null || true
   lsof -ti tcp:8000 | xargs kill -9 2>/dev/null || true
   lsof -ti tcp:3000 | xargs kill -9 2>/dev/null || true

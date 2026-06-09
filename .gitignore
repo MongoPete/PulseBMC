@@ -1,6 +1,15 @@
 .DS_Store
+
+# Internal dev only — never ship to customers
+.cursor/
+assets/
+
+# Secrets — keep .env.example committable
 .env
 .env.*
+!.env.example
+!**/.env.example
+
 node_modules/
 dist/
 build/

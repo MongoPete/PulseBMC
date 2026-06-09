@@ -1,7 +1,15 @@
-const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+/** Same-origin proxy to the FastAPI backend (see app/api/proxy/[...path]/route.ts). */
+const PROXY = "/api/proxy";
+
+function toProxyPath(path: string): string {
+  if (path.startsWith("/api/")) {
+    return `${PROXY}${path.slice(4)}`;
+  }
+  return `${PROXY}${path}`;
+}
 
 export async function apiFetch(path: string, options?: RequestInit) {
-  const res = await fetch(`${API}${path}`, options);
+  const res = await fetch(toProxyPath(path), options);
   if (!res.ok) throw new Error(`API ${path} → ${res.status}`);
   return res.json();
 }
@@ -67,4 +75,5 @@ export const api = {
     }),
 };
 
-export const SSE_URL = `${API}/api/test-runs/stream`;
+/** SSE via same-origin proxy — session cookie authenticates the stream. */
+export const SSE_URL = `${PROXY}/test-runs/stream`;

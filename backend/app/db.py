@@ -95,6 +95,35 @@ async def ensure_indexes():
     except Exception:
         pass
 
+    # Atlas Search — lexical index for alert summary keyword search (explorer uses $search, not $regex)
+    # status/severity/device_id use "token" type so compound.equals filters work correctly.
+    _alerts_lexical_def = {
+        "mappings": {
+            "dynamic": False,
+            "fields": {
+                "summary": {"type": "string"},
+                "device_id": {"type": "token"},
+                "severity": {"type": "token"},
+                "status": {"type": "token"},
+            },
+        }
+    }
+    try:
+        await db.command({
+            "createSearchIndexes": "alerts",
+            "indexes": [{"name": "alerts_lexical_idx", "definition": _alerts_lexical_def}],
+        })
+    except Exception:
+        pass
+    # Migrate existing index if it was created with string-typed filter fields
+    try:
+        await db.command({
+            "updateSearchIndexes": "alerts",
+            "indexes": [{"name": "alerts_lexical_idx", "definition": _alerts_lexical_def}],
+        })
+    except Exception:
+        pass
+
 
 async def close_client():
     global _client

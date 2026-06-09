@@ -3,9 +3,9 @@
 SoCPulse seed script — bootstraps Atlas with devices, test patterns, and historical data.
 
 What it creates:
-  - 20 devices across 2 datacenters
-  - 1 test pattern: loopback_v1
-  - 48h of historical test runs (realistic failure rates)
+  - 20 devices across 2 datacenters (with realistic operational statuses)
+  - 1 test pattern: loopback_v1 (PCIe in-system loopback / Tessent IST style)
+  - 48h of historical test runs with core-level results, failure modes, NVMe SMART
   - 10 pre-embedded historical PCIe LB_TIMEOUT failures on device-003
     (these are the "prior incidents" the RAG demo agent retrieves)
 
@@ -23,13 +23,16 @@ import random
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-# Add parent to path so we can import app modules
-sys.path.insert(0, str(Path(__file__).parent.parent))
+# Add parent + simulator to path so we can import app + NvmeAdapter
+_backend = Path(__file__).parent.parent
+sys.path.insert(0, str(_backend))
+sys.path.insert(0, str(_backend / "simulator"))
 
 from dotenv import load_dotenv
-load_dotenv(Path(__file__).parent.parent / ".env")
+load_dotenv(_backend / ".env")
 
 import pymongo
+from nvme_adapter import NvmeAdapter
 from app.services.embeddings import build_embedding_text_for_test_run, embed_documents_sync
 
 ATLAS_URI = os.environ.get("ATLAS_URI")
@@ -41,66 +44,197 @@ DATACENTERS = [
 ]
 ERROR_CODES = ["LB_TIMEOUT", "CONTINUITY_FAIL", "LOOPBACK_FAIL_TIMING", "SIGNAL_INTEGRITY_ERR"]
 COMPONENTS = ["pcie_card_1", "pcie_card_2", "pcie_card_3"]
+CORES_PER_COMPONENT = 4
+FAULT_POOL = [
+    "upstream_pcie_controller_A",
+    "upstream_pcie_controller_B",
+    "shared_pcie_hub_01",
+    "pcie_switch_fabric_east",
+]
+
+# Matches simulator/config.json — drives failure_mode behavior in seeded history
+DEVICE_PROFILES = {
+    "device-003": {"fail_rate": 0.06, "failure_mode": "intermittent"},
+    "device-007": {"fail_rate": 0.12, "failure_mode": "none"},       # trending failure alert
+    "device-008": {"fail_rate": 0.04, "failure_mode": "sticky"},
+    "device-012": {"fail_rate": 0.02, "failure_mode": "silent"},
+    "device-015": {"fail_rate": 0.03, "failure_mode": "intermittent"},
+    "device-019": {"fail_rate": 0.02, "failure_mode": "intermittent"},
+}
+
+DEVICE_STATUS = {
+    "device-001": "offline",
+    "device-007": "degrading",
+    "device-008": "maintenance",
+}
+
+
+def _iso(ts: datetime) -> str:
+    return ts.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")
 
 
 def make_device(i: int) -> dict:
     dc = DATACENTERS[i % 2]
     rack = dc["racks"][i % len(dc["racks"])]
+    device_id = f"device-{i:03d}"
+    now = datetime.now(timezone.utc)
     return {
-        "device_id": f"device-{i:03d}",
+        "device_id": device_id,
         "hostname": f"bmc-{dc['datacenter']}-{i:03d}",
         "location": {"datacenter": dc["datacenter"], "rack": rack, "slot": (i % 10) + 1},
         "hardware": {"bmc_arch": "ARM64", "cpu_cores": 2, "memory_gb": 2, "storage_types": ["eMMC"]},
-        "status": "online",
-        "registered_at": datetime.now(timezone.utc),
-        "last_seen": datetime.now(timezone.utc),
+        "status": DEVICE_STATUS.get(device_id, "online"),
+        "registered_at": _iso(now - timedelta(days=30)),
+        "last_seen": _iso(now),
     }
 
 
-def make_test_run(device_id: str, ts: datetime, fail_rate: float = 0.03) -> dict:
-    failed = random.random() < fail_rate
-    components = []
-    for comp_id in COMPONENTS:
-        comp_failed = failed and random.random() < 0.6
-        components.append({
-            "component_id": comp_id,
-            "result": "fail" if comp_failed else "pass",
-            "error_code": random.choice(ERROR_CODES) if comp_failed else None,
-            "core_results": [],
-        })
-    overall = "fail" if failed else "pass"
-    return {
-        "device_id": device_id,
-        "pattern_id": "loopback_v1",
-        "started_at": ts,
-        "completed_at": ts + timedelta(milliseconds=random.randint(200, 600)),
-        "duration_ms": random.randint(200, 600),
-        "status": overall,
-        "led_state": "red" if failed else "green",
-        "results": {"overall": overall, "components": components},
-        "triggered_by": "seed",
-    }
+class SeedRunGenerator:
+    """Generates realistic in-system loopback test runs matching the live simulator schema."""
+
+    def __init__(self):
+        self._sticky_latched: dict[str, bool] = {}
+        self._last_outcome: dict[str, bool] = {}
+        self._degradation_phase: dict[str, int] = {}
+        self._temp_baseline: dict[str, float] = {}
+        self._fault_sources: dict[str, str] = {}
+        self._nvme = NvmeAdapter()
+
+    def _fault_source(self, device_id: str) -> str:
+        if device_id not in self._fault_sources:
+            num = int(device_id.split("-")[-1])
+            self._fault_sources[device_id] = FAULT_POOL[num % len(FAULT_POOL)]
+        return self._fault_sources[device_id]
+
+    def _core_temp(self, failing: bool, offset: float) -> float:
+        lo, hi = (68.0, 92.0) if failing else (38.0, 62.0)
+        return round(min(95.0, max(25.0, random.uniform(lo, hi) + offset)), 1)
+
+    def make_test_run(self, device_id: str, ts: datetime, fail_rate: float = 0.02, failure_mode: str = "none") -> dict:
+        duration_ms = random.randint(200, 600)
+        in_degradation = self._degradation_phase.get(device_id, 0) > 0
+        baseline = self._temp_baseline.get(device_id, 50.0)
+
+        if in_degradation:
+            baseline += (76.0 - baseline) * 0.25
+        else:
+            baseline += (50.0 - baseline) * 0.20
+        self._temp_baseline[device_id] = baseline
+        temp_offset = max(0.0, baseline - 50.0) * 0.6
+
+        effective_rate = fail_rate
+        if in_degradation:
+            effective_rate = min(fail_rate * 3.0, 0.65)
+        if failure_mode == "intermittent":
+            if self._last_outcome.get(device_id, False):
+                effective_rate = min(effective_rate * 2.5, 0.40)
+            else:
+                effective_rate *= 0.30
+
+        if failure_mode == "sticky":
+            if self._sticky_latched.get(device_id):
+                failed = True
+            else:
+                failed = random.random() < effective_rate
+                if failed:
+                    self._sticky_latched[device_id] = True
+        elif failure_mode == "silent":
+            failed = False
+        else:
+            failed = random.random() < effective_rate
+
+        self._last_outcome[device_id] = failed
+        if failed and not in_degradation:
+            self._degradation_phase[device_id] = random.randint(4, 8)
+        elif in_degradation:
+            self._degradation_phase[device_id] -= 1
+            if self._degradation_phase[device_id] <= 0:
+                del self._degradation_phase[device_id]
+
+        silent_corrupt = failure_mode == "silent" and random.random() < 0.15
+
+        components = []
+        for comp_id in COMPONENTS:
+            comp_failed = failed and random.random() < 0.7
+            core_results = []
+            for i in range(CORES_PER_COMPONENT):
+                core_fail = comp_failed and random.random() < 0.5
+                core_results.append({
+                    "core_id": f"core_{i}",
+                    "result": "fail" if core_fail else "pass",
+                    "latency_ms": round(random.uniform(1.0, 8.0), 2),
+                    "temp_c": self._core_temp(core_fail, temp_offset),
+                })
+            comp_doc = {
+                "component_id": comp_id,
+                "result": "fail" if comp_failed else "pass",
+                "error_code": random.choice(ERROR_CODES) if comp_failed else None,
+                "core_results": core_results,
+            }
+            if silent_corrupt and comp_id == COMPONENTS[0]:
+                comp_doc["corruption_detected"] = True
+                comp_doc["corruption_crc"] = f"0x{random.randint(0x1000, 0xFFFF):04X}"
+            components.append(comp_doc)
+
+        overall = "fail" if failed else "pass"
+        completed = ts + timedelta(milliseconds=duration_ms)
+        true_fault_source = self._fault_source(device_id) if failed and random.random() < 0.30 else None
+        nvme_smart = self._nvme.smart_log(device_id, degrading=in_degradation, temp_c=baseline)
+        nvme_errors = self._nvme.error_log(device_id, failed=failed)
+
+        doc = {
+            "device_id": device_id,
+            "pattern_id": "loopback_v1",
+            "started_at": _iso(ts),
+            "completed_at": _iso(completed),
+            "duration_ms": duration_ms,
+            "status": overall,
+            "led_state": "red" if failed else "green",
+            "results": {"overall": overall, "components": components},
+            "triggered_by": "seed",
+            "failure_mode": failure_mode if failure_mode != "none" else None,
+            "nvme_smart": nvme_smart,
+            "nvme_errors": nvme_errors if nvme_errors else None,
+        }
+        if true_fault_source:
+            doc["true_fault_source"] = true_fault_source
+        return doc
 
 
 def make_rag_seed_failure(i: int) -> dict:
     """Pre-embedded historical PCIe loopback timeout failure — the RAG demo retrieves these."""
     ts = datetime.now(timezone.utc) - timedelta(days=random.randint(1, 14))
+    duration_ms = 412
+    core_results = [
+        {"core_id": f"core_{j}", "result": "fail" if j < 2 else "pass", "latency_ms": 7.2, "temp_c": 84.5 if j < 2 else 52.1}
+        for j in range(4)
+    ]
     return {
         "device_id": "device-003",
         "pattern_id": "loopback_v1",
-        "started_at": ts,
-        "completed_at": ts + timedelta(milliseconds=412),
-        "duration_ms": 412,
+        "started_at": _iso(ts),
+        "completed_at": _iso(ts + timedelta(milliseconds=duration_ms)),
+        "duration_ms": duration_ms,
         "status": "fail",
         "led_state": "red",
+        "failure_mode": "intermittent",
+        "true_fault_source": "upstream_pcie_controller_A",
         "results": {
             "overall": "fail",
             "components": [{
                 "component_id": "pcie_card_1",
                 "result": "fail",
                 "error_code": "LB_TIMEOUT",
-                "core_results": [{"core_id": f"core_{j}", "result": "fail" if j < 2 else "pass", "latency_ms": 7.2} for j in range(4)],
+                "core_results": core_results,
             }],
+        },
+        "nvme_smart": {
+            "critical_warning": 0,
+            "temperature": 78,
+            "media_errors": 12,
+            "num_err_log_entries": 4,
+            "available_spare": 92,
+            "percentage_used": 5,
         },
         "triggered_by": "seed_rag",
     }
@@ -147,10 +281,10 @@ def main():
     pattern = {
         "pattern_id": "loopback_v1",
         "test_type": "loopback",
-        "description": "PCIe loopback continuity and signal integrity test. DESTRUCTIVE — card goes offline during test.",
+        "description": "PCIe loopback continuity and signal integrity test (Tessent In-System Test style). DESTRUCTIVE — card goes offline during test.",
         "config": {"duration_ms": 400, "target_component": "pcie_card_1", "parameters": {"lanes": 16, "speed_gbps": 8.0}},
         "size_bytes": 8192,
-        "tags": ["loopback", "pcie", "continuity", "health"],
+        "tags": ["loopback", "pcie", "continuity", "health", "in-system-test"],
         "version": "1.0",
     }
     if not args.dry_run:
@@ -160,19 +294,18 @@ def main():
     # Step 3: Historical test runs (48h)
     print("[3/5] Generating 48h of historical test runs...", end="", flush=True)
     now = datetime.now(timezone.utc)
-    failure_rates = {
-        "device-007": 0.12,  # Trending failure — crosses threshold
-        "device-003": 0.08,
-        "device-015": 0.03,
-    }
+    generator = SeedRunGenerator()
     runs = []
     for device in devices:
         device_id = device["device_id"]
-        fail_rate = failure_rates.get(device_id, 0.02)
-        # One run every ~10 minutes for 48h = ~288 runs per device
+        profile = DEVICE_PROFILES.get(device_id, {"fail_rate": 0.02, "failure_mode": "none"})
         ts = now - timedelta(hours=48)
         while ts < now:
-            runs.append(make_test_run(device_id, ts, fail_rate))
+            runs.append(generator.make_test_run(
+                device_id, ts,
+                fail_rate=profile["fail_rate"],
+                failure_mode=profile["failure_mode"],
+            ))
             ts += timedelta(seconds=600 + random.randint(-60, 60))
 
     if not args.dry_run:
@@ -183,19 +316,27 @@ def main():
     final_runs = []
     for device in devices:
         device_id = device["device_id"]
+        core_results = [
+            {"core_id": f"core_{j}", "result": "pass", "latency_ms": 2.1, "temp_c": 48.0}
+            for j in range(CORES_PER_COMPONENT)
+        ]
         final_runs.append({
             "device_id": device_id,
             "pattern_id": "loopback_v1",
-            "started_at": now,
-            "completed_at": now + timedelta(milliseconds=200),
+            "started_at": _iso(now),
+            "completed_at": _iso(now + timedelta(milliseconds=200)),
             "duration_ms": 200,
             "status": "pass",
             "led_state": "green",
             "results": {
                 "overall": "pass",
-                "components": [{"component_id": c, "result": "pass", "error_code": None, "core_results": []} for c in COMPONENTS],
+                "components": [
+                    {"component_id": c, "result": "pass", "error_code": None, "core_results": core_results}
+                    for c in COMPONENTS
+                ],
             },
             "triggered_by": "seed",
+            "nvme_smart": generator._nvme.smart_log(device_id, degrading=False, temp_c=48.0),
         })
     if not args.dry_run:
         db.test_runs.insert_many(final_runs)
@@ -206,7 +347,6 @@ def main():
     print("[4/5] Generating 10 historical PCIe failures for RAG demo...", end="", flush=True)
     rag_failures = [make_rag_seed_failure(i) for i in range(10)]
     if not args.dry_run:
-        # Build embedding texts
         texts = [build_embedding_text_for_test_run(r) for r in rag_failures]
         print(f"\n        Embedding {len(texts)} documents via Voyage AI voyage-4-large...", end="", flush=True)
         try:
@@ -215,7 +355,7 @@ def main():
                 run["embedding_text"] = texts[i]
                 run["embedding"] = embeddings[i]
                 run["embedding_model"] = "voyage-4-large"
-                run["embedded_at"] = datetime.now(timezone.utc)
+                run["embedded_at"] = _iso(datetime.now(timezone.utc))
         except Exception as e:
             print(f"\n        WARNING: Embedding failed ({e}). RAG demo will work once VOYAGE_API_KEY is set.")
         db.test_runs.insert_many(rag_failures)
@@ -226,7 +366,7 @@ def main():
     alert = {
         "device_id": "device-007",
         "rule_id": "failure_rate_threshold",
-        "triggered_at": now - timedelta(minutes=15),
+        "triggered_at": _iso(now - timedelta(minutes=15)),
         "severity": "high",
         "summary": "Device device-007 failure rate 12.3% over last hour (11/89 loopback tests failed) — exceeds 10% threshold",
         "linked_test_runs": [],

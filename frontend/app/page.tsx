@@ -412,7 +412,8 @@ export default function FleetPage() {
 
   const handleDeviceAction = useCallback(async (deviceId: string, action: "logs" | "analysis" | "rerun" | "isolate") => {
     if (action === "logs") {
-      window.open(`/devices/${deviceId}`, "_blank", "noopener,noreferrer");
+      setDrawerDeviceId(null);
+      router.push(`/devices/${deviceId}`);
     } else if (action === "analysis") {
       router.push(`/alerts?device_id=${deviceId}`);
     } else if (action === "rerun") {

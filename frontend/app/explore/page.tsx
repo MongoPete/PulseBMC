@@ -25,7 +25,8 @@ interface ExploreResult {
     mongodb_pipeline?: unknown[];
     mongodb_filter?: Record<string, unknown>;
     sql_equivalent: string;
-    index_hint?: string;
+    query_strategy?: string;
+    performance_note?: string;
   };
 }
 
@@ -45,93 +46,103 @@ type SortDir = "asc" | "desc" | null;
 // ── Starter questions ─────────────────────────────────────────────────────────
 
 const STARTER_QUESTIONS: StarterQuestion[] = [
-  // Aggregation / grouping
   {
-    category: "Aggregation",
-    label: "Failure rate by device",
-    q: "Which device has the most failures this week?",
-    mdb: "$group → $sort",
+    category: "Loopback Failures",
+    label: "LB_TIMEOUT on pcie_card_1",
+    q: "Show loopback test runs where pcie_card_1 failed with LB_TIMEOUT",
+    mdb: "$elemMatch on results.components[]",
+    sql: "JOIN WHERE component_id='pcie_card_1' AND error_code='LB_TIMEOUT'",
+  },
+  {
+    category: "Loopback Failures",
+    label: "Highest failure-rate device",
+    q: "Which device has the most loopback_v1 failures in the last 7 days?",
+    mdb: "$match → $group → $sort",
     sql: "GROUP BY device_id ORDER BY count DESC",
   },
   {
-    category: "Aggregation",
-    label: "Pass vs fail count today",
-    q: "How many tests passed vs failed per device today?",
-    mdb: "$group by {device_id, status}",
-    sql: "GROUP BY device_id, status (PIVOT)",
-  },
-  {
-    category: "Aggregation",
-    label: "Error code frequency (24h)",
-    q: "What error codes appeared most in the last 24 hours?",
-    mdb: "$unwind → $match → $group → $sort",
+    category: "Loopback Failures",
+    label: "Error code breakdown",
+    q: "What loopback error codes appeared most often this week?",
+    mdb: "$unwind components → $group error_code",
     sql: "UNNEST + GROUP BY error_code",
   },
-  // Nested / embedded docs
   {
-    category: "Nested Data",
-    label: "Query nested component array",
-    q: "Show all test runs where pcie_card_1 failed",
-    mdb: "$elemMatch on results.components[]",
-    sql: "JOIN test_run_components WHERE component_id = 'pcie_card_1'",
+    category: "Loopback Failures",
+    label: "Signal integrity vs continuity",
+    q: "How many SIGNAL_INTEGRITY_ERR vs CONTINUITY_FAIL errors occurred in the last 7 days?",
+    mdb: "$unwind → $group error_code",
+    sql: "GROUP BY error_code WHERE error_code IN (...)",
   },
   {
-    category: "Nested Data",
-    label: "Group by embedded location",
-    q: "Which rack has the most device failures?",
-    mdb: "$group on location.rack (embedded field)",
-    sql: "JOIN locations ON rack_id + GROUP BY rack",
+    category: "Core-Level IST",
+    label: "High core temperature",
+    q: "Show loopback runs where any core temperature exceeded 80°C",
+    mdb: "$elemMatch on core_results.temp_c",
+    sql: "JOIN core_results WHERE temp_c > 80",
   },
   {
-    category: "Nested Data",
-    label: "Corruption in component results",
-    q: "Show test runs with silent data corruption detected",
-    mdb: "$match on results.components.corruption_detected",
-    sql: "JOIN + WHERE corruption_detected = true",
-  },
-  // Time-series / range
-  {
-    category: "Time Range",
-    label: "Failure trend over time",
-    q: "How many failures occurred per hour in the last 12 hours?",
-    mdb: "$dateToString → $group by hour",
-    sql: "DATE_TRUNC('hour', started_at) GROUP BY",
+    category: "Core-Level IST",
+    label: "Core latency outliers",
+    q: "Find loopback runs where core latency exceeded 6ms on pcie_card_1",
+    mdb: "$unwind → $match latency_ms",
+    sql: "JOIN core_results WHERE latency_ms > 6",
   },
   {
-    category: "Time Range",
-    label: "Recent high-latency tests",
-    q: "Show test runs with the highest duration in the last 24 hours",
-    mdb: "$match on started_at + $sort on duration_ms",
-    sql: "WHERE started_at > NOW()-1d ORDER BY duration_ms DESC",
-  },
-  // Operational filters
-  {
-    category: "Operational",
-    label: "Devices in maintenance",
-    q: "Which devices are currently in maintenance or offline?",
-    mdb: "$match on status field",
-    sql: "WHERE status IN ('maintenance','offline')",
-  },
-  {
-    category: "Operational",
-    label: "Intermittent failure mode",
-    q: "List test runs where the failure mode is intermittent",
-    mdb: "$match on failure_mode = 'intermittent'",
+    category: "Failure Modes",
+    label: "Intermittent loopback failures",
+    q: "List intermittent failure mode loopback test runs from the last 7 days",
+    mdb: "$match failure_mode='intermittent'",
     sql: "WHERE failure_mode = 'intermittent'",
   },
   {
-    category: "Operational",
-    label: "Open alerts by severity",
-    q: "Show all open alerts grouped by severity",
-    mdb: "$match status=open → $group on severity",
-    sql: "WHERE status='open' GROUP BY severity",
+    category: "Failure Modes",
+    label: "Silent CRC corruption",
+    q: "Show passing loopback tests where silent CRC corruption was detected",
+    mdb: "$match status=pass + corruption_detected",
+    sql: "WHERE status='pass' AND corruption_detected=true",
   },
   {
-    category: "Operational",
-    label: "NVMe media errors",
-    q: "Which devices have the most NVMe media errors?",
-    mdb: "$group on nvme_smart.media_errors",
+    category: "NVMe Telemetry",
+    label: "Rising media errors",
+    q: "Which devices have the highest NVMe media_errors count?",
+    mdb: "$sort on nvme_smart.media_errors",
     sql: "ORDER BY nvme_smart_media_errors DESC",
+  },
+  {
+    category: "Fleet Ops",
+    label: "Failures by datacenter",
+    q: "Which datacenter has the most loopback failures in the last 24 hours?",
+    mdb: "$lookup devices → $group datacenter",
+    sql: "JOIN devices GROUP BY datacenter",
+  },
+  {
+    category: "Fleet Ops",
+    label: "Open high-severity alerts",
+    q: "Show open alerts with failure rate above 10%",
+    mdb: "$match alerts status=open",
+    sql: "WHERE status='open' AND failure_rate > 0.10",
+  },
+  {
+    category: "Fleet Ops",
+    label: "Alert keyword search",
+    q: "Find open alerts mentioning loopback failure threshold",
+    mdb: "$search alerts_lexical_idx",
+    sql: "FULLTEXT SEARCH on summary (not LIKE/regex)",
+  },
+  {
+    category: "Fault Attribution",
+    label: "Upstream controller faults",
+    q: "Which upstream PCIe controller is linked to the most loopback failures?",
+    mdb: "$group on true_fault_source",
+    sql: "GROUP BY true_fault_source",
+  },
+  {
+    category: "Fleet Ops",
+    label: "Devices not online",
+    q: "Which devices are offline, in maintenance, or degrading?",
+    mdb: "$match on devices.status",
+    sql: "WHERE status IN ('offline','maintenance','degrading')",
   },
 ];
 
@@ -378,6 +389,7 @@ export default function ExplorePage() {
   const [question, setQuestion] = useState("");
   const [result, setResult] = useState<ExploreResult | null>(null);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [showQuery, setShowQuery] = useState(false);
   const [facets, setFacets] = useState<Facets | null>(null);
   const [timeScope, setTimeScope] = useState<"1h" | "24h" | "7d" | "all">("24h");
@@ -402,12 +414,20 @@ export default function ExplorePage() {
     setQuestion(q);
     setLoading(true);
     setResult(null);
+    setError(null);
     setShowQuery(false);
     setHistory((h) => [q, ...h.filter((x) => x !== q)].slice(0, 8));
     try {
-      const res = await api.explore(full) as ExploreResult;
-      setResult(res);
+      const res = await api.explore(full) as ExploreResult & { error?: string };
+      if (res.error) {
+        setError(res.error);
+      } else {
+        setResult(res);
+      }
       setShowQuery(false);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Query failed";
+      setError(msg.includes("Failed to fetch") ? "Could not reach the API — is the backend running on port 8000?" : msg);
     } finally {
       setLoading(false);
     }
@@ -455,7 +475,7 @@ export default function ExplorePage() {
             value={question}
             onChange={(e) => setQuestion(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && question && ask(question)}
-            placeholder="e.g. Which device has the highest fault rate this week?"
+            placeholder="e.g. Show loopback runs where pcie_card_1 failed with LB_TIMEOUT"
             className="flex-1 bg-white border border-slate-300 rounded-lg px-4 py-3 text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-400"
           />
           <button
@@ -569,6 +589,13 @@ export default function ExplorePage() {
         )}
       </div>
 
+      {/* Error */}
+      {error && (
+        <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+          {error}
+        </div>
+      )}
+
       {/* Results */}
       {result && (
         <div className="space-y-4">
@@ -613,8 +640,13 @@ export default function ExplorePage() {
                     <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
                       MongoDB · {result.query_info?.operation}
                     </p>
-                    <span className="text-[10px] font-mono bg-emerald-50 border border-emerald-200 text-emerald-700 px-1.5 py-0.5 rounded">
-                      aggregation pipeline
+                    {result.query_info?.query_strategy && (
+                      <span className="text-[10px] font-mono bg-emerald-50 border border-emerald-200 text-emerald-700 px-1.5 py-0.5 rounded">
+                        {result.query_info.query_strategy}
+                      </span>
+                    )}
+                    <span className="text-[10px] font-mono bg-slate-100 border border-slate-200 text-slate-600 px-1.5 py-0.5 rounded">
+                      {result.query_info?.operation === "aggregate" ? "aggregation pipeline" : "find query"}
                     </span>
                   </div>
                   <pre className="bg-white rounded-lg p-4 text-xs overflow-auto leading-relaxed border border-slate-200 font-mono">
@@ -637,10 +669,15 @@ export default function ExplorePage() {
                   </pre>
                 </div>
 
-                {result.query_info?.index_hint && (
-                  <div className="px-4 py-3 flex items-center gap-2 text-xs text-slate-600">
-                    <span>⚡</span>
-                    <span>{result.query_info.index_hint}</span>
+                {result.query_info?.performance_note && (
+                  <div className={`px-4 py-3 flex items-start gap-2 text-xs ${
+                    result.query_info.performance_note.includes("$regex") ? "text-amber-700 bg-amber-50" : "text-slate-600"
+                  }`}>
+                    <span className="mt-0.5">⚡</span>
+                    <div>
+                      <span className="font-medium">Performance · </span>
+                      {result.query_info.performance_note}
+                    </div>
                   </div>
                 )}
               </div>

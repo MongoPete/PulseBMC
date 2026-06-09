@@ -1,9 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { signIn } from "next-auth/react";
 import { BrandLockup } from "@/components/Brand";
-import { signIn, OPERATOR_USER, OPERATOR_PASS } from "@/components/AuthGate";
 import { SIEMENS_PETROL, SIEMENS_DARK } from "@/lib/theme";
 
 // ── "How it works" content ─────────────────────────────────────────────────
@@ -73,19 +72,26 @@ const SQL_CONCEPTS = [
 // ── Component ──────────────────────────────────────────────────────────────
 
 export default function LoginPage() {
-  const router = useRouter();
-  const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
   const [expandedStep, setExpandedStep] = useState<string | null>(null);
 
-  const onSubmit = (e: React.FormEvent) => {
+  const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (username.trim() === OPERATOR_USER && password === OPERATOR_PASS) {
-      signIn();
-      router.replace("/");
+    setLoading(true);
+    setError("");
+    const result = await signIn("credentials", {
+      email: email.trim(),
+      password,
+      redirect: false,
+    });
+    setLoading(false);
+    if (result?.error) {
+      setError("Invalid credentials. Contact your administrator for access.");
     } else {
-      setError("Invalid credentials. Use the access credentials shown below.");
+      window.location.href = "/";
     }
   };
 
@@ -244,15 +250,15 @@ export default function LoginPage() {
 
                 <form onSubmit={onSubmit} className="space-y-3 mt-5">
                   <div>
-                    <label className="block text-xs font-semibold text-slate-600 mb-1">Username</label>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1">Email</label>
                     <input
-                      type="text"
-                      value={username}
-                      onChange={(e) => { setUsername(e.target.value); setError(""); }}
-                      autoComplete="username"
+                      type="email"
+                      value={email}
+                      onChange={(e) => { setEmail(e.target.value); setError(""); }}
+                      autoComplete="email"
                       className="w-full text-sm border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2"
                       style={{ accentColor: SIEMENS_PETROL }}
-                      placeholder="operator"
+                      placeholder="you@company.com"
                     />
                   </div>
                   <div>
@@ -271,19 +277,17 @@ export default function LoginPage() {
 
                   <button
                     type="submit"
-                    className="w-full text-sm font-semibold text-white rounded-lg py-2 transition-opacity hover:opacity-90"
+                    disabled={loading}
+                    className="w-full text-sm font-semibold text-white rounded-lg py-2 transition-opacity hover:opacity-90 disabled:opacity-60"
                     style={{ background: SIEMENS_PETROL }}
                   >
-                    Sign in
+                    {loading ? "Signing in…" : "Sign in"}
                   </button>
                 </form>
 
-                {/* Sign-in credentials */}
-                <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] text-slate-500">
-                  <span className="font-mono text-slate-600">{OPERATOR_USER}</span>
-                  <span className="mx-1.5 text-slate-300">/</span>
-                  <span className="font-mono text-slate-600">{OPERATOR_PASS}</span>
-                </div>
+                <p className="mt-4 text-[11px] text-slate-500">
+                  Demo access is provisioned by your administrator. Atlas and AI keys never leave the server.
+                </p>
 
                 {/* What you'll see after sign in */}
                 <div className="mt-4 space-y-1.5">
