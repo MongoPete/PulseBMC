@@ -1,5 +1,6 @@
 import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
+import { matchAuthUser } from "@/lib/authUsers";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   trustHost: true,
@@ -13,16 +14,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         password: { label: "Password", type: "password" },
       },
       authorize(credentials) {
-        const email = process.env.DEMO_USER?.trim();
-        const password = process.env.DEMO_USER_PASSWORD;
-        if (!email || !password) return null;
-        if (
-          credentials?.email === email &&
-          credentials?.password === password
-        ) {
-          return { id: "demo", name: email, email };
-        }
-        return null;
+        const user = matchAuthUser(
+          credentials?.email as string | undefined,
+          credentials?.password as string | undefined,
+        );
+        if (!user) return null;
+        return { id: user.id, name: user.email, email: user.email };
       },
     }),
   ],
