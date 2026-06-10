@@ -1,5 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
+import { MongoLabel, PanelAccentBar, SqlLabel } from "@/components/ConceptLabels";
+import { SIEMENS_PETROL } from "@/lib/theme";
 import { api } from "@/lib/api";
 
 interface ConceptCard {
@@ -50,12 +52,14 @@ export default function ConceptBar() {
     setActiveDetail((prev) => (prev === mongoTerm ? null : mongoTerm));
   };
 
+  const activeCard = STATIC_CARDS.find((c) => c.mongoTerm === activeDetail);
+
   return (
     <div className="border-b bg-white w-full min-w-0" style={{ borderColor: "#e2e8f0" }}>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <button
           onClick={toggle}
-          className="text-xs text-slate-400 hover:text-slate-700 transition-colors shrink-0 min-h-[36px] text-left"
+          className="text-xs text-slate-500 hover:text-slate-800 transition-colors shrink-0 min-h-[36px] text-left font-medium"
         >
           {visible ? "▾ MongoDB ↔ SQL concepts" : "▸ MongoDB ↔ SQL concepts"}
         </button>
@@ -70,7 +74,7 @@ export default function ConceptBar() {
                 key={c.collection}
                 className="text-xs text-slate-600 bg-slate-50 px-2 py-0.5 rounded border border-slate-200 whitespace-nowrap shrink-0"
               >
-                <span className="font-mono font-medium" style={{ color: "#009999" }}>
+                <span className="font-mono font-medium" style={{ color: SIEMENS_PETROL }}>
                   {c.collection}
                 </span>
                 {c.count !== undefined && (
@@ -83,32 +87,45 @@ export default function ConceptBar() {
       </div>
 
       {visible && (
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 pb-2 min-w-0">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 pb-3 min-w-0">
           <div className="flex gap-2 overflow-x-auto pb-1 snap-x snap-mandatory scrollbar-thin md:flex-wrap md:overflow-visible md:snap-none -mx-1 px-1">
-            {STATIC_CARDS.map((card) => (
-              <button
-                key={card.mongoTerm}
-                type="button"
-                onClick={() => toggleDetail(card.mongoTerm)}
-                className={`group relative text-xs bg-slate-50 border rounded px-2.5 py-1.5 shrink-0 snap-start text-left transition-colors min-h-[36px] md:cursor-help max-w-[85vw] sm:max-w-none ${
-                  activeDetail === card.mongoTerm
-                    ? "border-teal-400 bg-teal-50/50"
-                    : "border-slate-200 hover:border-slate-300"
-                }`}
-              >
-                <span className="font-mono font-medium text-slate-700">{card.mongoTerm}</span>
-                <span className="text-slate-400 mx-1">→</span>
-                <span className="font-medium text-blue-600">{card.sqlEquivalent}</span>
-                <div className="absolute bottom-full left-0 mb-1 hidden md:group-hover:block z-50 w-56 bg-white border border-slate-200 rounded p-2 text-slate-700 shadow-lg text-xs leading-relaxed pointer-events-none">
-                  {card.detail}
-                </div>
-              </button>
-            ))}
+            {STATIC_CARDS.map((card) => {
+              const active = activeDetail === card.mongoTerm;
+              return (
+                <button
+                  key={card.mongoTerm}
+                  type="button"
+                  onClick={() => toggleDetail(card.mongoTerm)}
+                  aria-expanded={active}
+                  className={`text-xs border rounded-md px-2.5 py-1.5 shrink-0 snap-start text-left transition-colors min-h-[36px] max-w-[85vw] sm:max-w-none ${
+                    active
+                      ? "bg-[#009999]/10"
+                      : "bg-slate-50 border-slate-200 hover:border-slate-300 hover:bg-white"
+                  }`}
+                  style={active ? { borderColor: SIEMENS_PETROL } : undefined}
+                >
+                  <span className="font-mono font-semibold text-slate-800">{card.mongoTerm}</span>
+                  <span className="text-slate-400 mx-1">≈</span>
+                  <span className="font-semibold text-blue-800">{card.sqlEquivalent}</span>
+                </button>
+              );
+            })}
           </div>
-          {activeDetail && (
-            <p className="md:hidden text-xs text-slate-600 mt-1.5 leading-relaxed break-words">
-              {STATIC_CARDS.find((c) => c.mongoTerm === activeDetail)?.detail}
-            </p>
+
+          {activeCard && (
+            <div className="mt-2 rounded-lg border border-slate-200 bg-white shadow-sm overflow-hidden">
+              <PanelAccentBar />
+              <div className="px-3 py-2.5 sm:px-4">
+                <div className="flex items-center gap-2 flex-wrap mb-1.5">
+                  <MongoLabel />
+                  <span className="font-mono text-xs font-semibold text-slate-800">{activeCard.mongoTerm}</span>
+                  <span className="text-slate-300">|</span>
+                  <SqlLabel />
+                  <span className="text-xs font-semibold text-blue-800">{activeCard.sqlEquivalent}</span>
+                </div>
+                <p className="text-xs text-slate-600 leading-relaxed">{activeCard.detail}</p>
+              </div>
+            </div>
           )}
         </div>
       )}

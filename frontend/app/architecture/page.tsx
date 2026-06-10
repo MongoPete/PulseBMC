@@ -97,8 +97,20 @@ function GenericCode({ code }: { code: string }) {
 
 // ── 1. System flow diagram ───────────────────────────────────────────────────
 
-function FlowArrow() {
-  return <div className="flex items-center text-slate-400 text-xl px-1 select-none font-bold">→</div>;
+function FlowArrowH() {
+  return (
+    <div className="hidden md:flex items-center text-slate-400 text-xl px-1 select-none font-bold shrink-0">
+      →
+    </div>
+  );
+}
+
+function FlowArrowV() {
+  return (
+    <div className="flex md:hidden items-center justify-center text-slate-400 text-lg py-0.5 select-none font-bold shrink-0 w-full">
+      ↓
+    </div>
+  );
 }
 
 function FlowBox({
@@ -114,9 +126,30 @@ function FlowBox({
     slate:  "border-slate-300 bg-white text-slate-700",
   };
   return (
-    <div className={`border-2 rounded-xl px-4 py-3 text-center min-w-[130px] ${colors[color]}`}>
+    <div className={`border-2 rounded-xl px-4 py-3 text-center w-full md:w-auto md:min-w-[130px] shrink-0 ${colors[color]}`}>
       <div className="text-sm font-bold">{label}</div>
-      <div className="text-[11px] mt-0.5 opacity-80">{sub}</div>
+      <div className="text-[11px] mt-0.5 opacity-80 leading-snug">{sub}</div>
+    </div>
+  );
+}
+
+type FlowStep = { label: string; sub: string; color?: "green" | "blue" | "amber" | "teal" | "slate" };
+
+/** Vertical stack on phone, horizontal chain on md+ — each step wraps as a unit */
+function FlowSequence({ steps }: { steps: FlowStep[] }) {
+  return (
+    <div className="flex flex-col md:flex-row md:flex-wrap md:items-center gap-0 md:gap-1">
+      {steps.map((step, i) => (
+        <div key={`${step.label}-${i}`} className="flex flex-col md:flex-row md:items-center w-full md:w-auto">
+          {i > 0 && (
+            <>
+              <FlowArrowV />
+              <FlowArrowH />
+            </>
+          )}
+          <FlowBox label={step.label} sub={step.sub} color={step.color} />
+        </div>
+      ))}
     </div>
   );
 }
@@ -132,7 +165,7 @@ function OverviewTier({
     blue:  "border-blue-300 bg-blue-50 text-blue-800",
   };
   return (
-    <div className={`flex-1 min-w-[150px] border-2 rounded-xl px-4 py-3 ${colors[color]}`}>
+    <div className={`w-full md:flex-1 md:min-w-[150px] border-2 rounded-xl px-4 py-3 ${colors[color]}`}>
       <div className="text-[10px] uppercase tracking-wide font-bold opacity-70">{tier}</div>
       <div className="text-sm font-bold mt-0.5">{title}</div>
       <div className="text-[11px] mt-1 opacity-80 leading-snug">{desc}</div>
@@ -142,16 +175,17 @@ function OverviewTier({
 
 function SimplifiedArchitecture() {
   return (
-    <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm">
+    <div className="bg-white border border-slate-200 rounded-xl p-4 sm:p-6 shadow-sm">
       <p className="text-xs text-slate-500 uppercase tracking-wide mb-4 font-bold">At a glance — four layers, one platform</p>
-      <div className="flex items-stretch gap-1 flex-wrap">
+      <div className="flex flex-col md:flex-row md:flex-wrap md:items-stretch gap-0 md:gap-1">
         <OverviewTier tier="Edge" title="Hardware" desc="BMC devices execute deterministic test patterns and report pass/fail per component" color="amber" />
-        <FlowArrow />
+        <FlowArrowV />
+        <FlowArrowH />
         <OverviewTier tier="Service" title="Application" desc="FastAPI — ingest, SSE, diagnostic chain" color="slate" />
-        <FlowArrow />
+        <FlowArrowV />
+        <FlowArrowH />
 
-        {/* Atlas hub — emphasized as the single platform */}
-        <div className="flex-1 min-w-[210px] border-2 border-emerald-300 bg-emerald-50 rounded-xl px-4 py-3">
+        <div className="w-full md:flex-1 md:min-w-[210px] border-2 border-emerald-300 bg-emerald-50 rounded-xl px-4 py-3">
           <div className="text-[10px] uppercase tracking-wide font-bold text-emerald-700/70">Data platform</div>
           <div className="text-sm font-bold text-emerald-800 mt-0.5">MongoDB Atlas</div>
           <div className="text-[11px] text-emerald-700/80 mt-1">one cluster, three jobs</div>
@@ -164,7 +198,8 @@ function SimplifiedArchitecture() {
           </div>
         </div>
 
-        <FlowArrow />
+        <FlowArrowV />
+        <FlowArrowH />
         <OverviewTier tier="Client" title="Operator UI" desc="Next.js dashboard — fleet, alerts, explorer" color="blue" />
       </div>
         <p className="text-xs text-slate-500 border-t border-slate-200 pt-3 mt-4 leading-relaxed">
@@ -176,53 +211,45 @@ function SimplifiedArchitecture() {
 
 function ArchFlowDiagram() {
   return (
-    <div className="bg-white border border-slate-200 rounded-xl p-6 space-y-6 shadow-sm">
-      {/* Main horizontal flow */}
+    <div className="bg-white border border-slate-200 rounded-xl p-4 sm:p-6 space-y-6 shadow-sm">
       <div>
         <p className="text-xs text-slate-500 uppercase tracking-wide mb-4 font-bold">Write path — loopback data to Atlas</p>
-        <div className="flex items-center gap-1 flex-wrap">
-          <FlowBox label="BMC Device" sub="hardware under test" color="amber" />
-          <FlowArrow />
-          <FlowBox label="emit_tests.py" sub="simulator / fleet host" color="amber" />
-          <FlowArrow />
-          <FlowBox label="POST /api/test-runs" sub="FastAPI · port 8000" color="slate" />
-          <FlowArrow />
-          <FlowBox label="MongoDB Atlas" sub="pulse_bmc database" color="green" />
-        </div>
+        <FlowSequence
+          steps={[
+            { label: "BMC Device", sub: "hardware under test", color: "amber" },
+            { label: "emit_tests.py", sub: "simulator / fleet host", color: "amber" },
+            { label: "POST /api/test-runs", sub: "FastAPI · port 8000", color: "slate" },
+            { label: "MongoDB Atlas", sub: "pulse_bmc database", color: "green" },
+          ]}
+        />
       </div>
 
-      {/* Divider */}
       <div className="border-t border-slate-200" />
 
-      {/* Read + real-time path */}
       <div>
         <p className="text-xs text-slate-500 uppercase tracking-wide mb-4 font-bold">Read path — real-time to browser</p>
-        <div className="flex items-center gap-1 flex-wrap">
-          <FlowBox label="MongoDB Atlas" sub="Change Stream on insert" color="green" />
-          <FlowArrow />
-          <FlowBox label="SSE stream" sub="GET /api/test-runs/stream" color="slate" />
-          <FlowArrow />
-          <FlowBox label="Next.js UI" sub="EventSource · port 3000" color="blue" />
-          <FlowArrow />
-          <FlowBox label="LED updates" sub="green / red / pulse" color="blue" />
-        </div>
+        <FlowSequence
+          steps={[
+            { label: "MongoDB Atlas", sub: "Change Stream on insert", color: "green" },
+            { label: "SSE stream", sub: "GET /api/test-runs/stream", color: "slate" },
+            { label: "Next.js UI", sub: "EventSource · port 3000", color: "blue" },
+            { label: "LED updates", sub: "green / red / pulse", color: "blue" },
+          ]}
+        />
       </div>
 
-      {/* Divider */}
       <div className="border-t border-slate-200" />
 
-      {/* Diagnostic path */}
       <div>
         <p className="text-xs text-slate-500 uppercase tracking-wide mb-4 font-bold">Diagnostic path — alert → fault isolation → work order</p>
-        <div className="flex items-center gap-1 flex-wrap">
-          <FlowBox label="Alert fires" sub="failure_rate > 10%" color="amber" />
-          <FlowArrow />
-          <FlowBox label="$vectorSearch" sub="Atlas finds similar failures" color="green" />
-          <FlowArrow />
-          <FlowBox label="Fault Isolation" sub="root cause + work order" color="teal" />
-          <FlowArrow />
-          <FlowBox label="agent_runs" sub="logged to Atlas" color="green" />
-        </div>
+        <FlowSequence
+          steps={[
+            { label: "Alert fires", sub: "failure_rate > 10%", color: "amber" },
+            { label: "$vectorSearch", sub: "Atlas finds similar failures", color: "green" },
+            { label: "Fault Isolation", sub: "root cause + work order", color: "teal" },
+            { label: "agent_runs", sub: "logged to Atlas", color: "green" },
+          ]}
+        />
         <p className="text-xs text-slate-500 border-t border-slate-200 pt-3 mt-4 leading-relaxed">
           The test pattern results stored here originate from Siemens EDA ATPG — PulseBMC closes the loop by monitoring pattern execution health at fleet scale.
         </p>
@@ -322,19 +349,17 @@ function AgentChainSection() {
       />
 
       {/* Chain overview flow */}
-      <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
+      <div className="bg-white border border-slate-200 rounded-xl p-4 sm:p-5 shadow-sm">
         <p className="text-xs text-slate-500 uppercase tracking-wide font-bold mb-4">Diagnostic chain flow — triggered by an open alert</p>
-        <div className="flex items-center gap-1 flex-wrap">
-          <FlowBox label="Open Alert" sub="alerts collection" color="amber" />
-          <FlowArrow />
-          <FlowBox label="Stage 1" sub="Failure Prediction" color="amber" />
-          <FlowArrow />
-          <FlowBox label="Stage 2" sub="Root Cause + RAG" color="teal" />
-          <FlowArrow />
-          <FlowBox label="Stage 3" sub="Work Order" color="teal" />
-          <FlowArrow />
-          <FlowBox label="agent_runs" sub="logged to Atlas" color="green" />
-        </div>
+        <FlowSequence
+          steps={[
+            { label: "Open Alert", sub: "alerts collection", color: "amber" },
+            { label: "Stage 1", sub: "Failure Prediction", color: "amber" },
+            { label: "Stage 2", sub: "Root Cause + RAG", color: "teal" },
+            { label: "Stage 3", sub: "Work Order", color: "teal" },
+            { label: "agent_runs", sub: "logged to Atlas", color: "green" },
+          ]}
+        />
         <div className="mt-4 pt-3 border-t border-slate-200 grid grid-cols-1 md:grid-cols-3 gap-3 text-[11px]">
           {[
             { label: "Similarity corpus", value: "test_runs collection — 1024-dim embeddings stored as a field on each document, queried via $vectorSearch" },
@@ -474,16 +499,49 @@ const TABLE2_COLS = [
   { name: "error_code",   type: "VARCHAR(32)", fk: false },
 ];
 
+function ERConnector() {
+  return (
+    <>
+      {/* Mobile — vertical JOIN connector */}
+      <div className="flex md:hidden flex-col items-center py-2 gap-1 w-full shrink-0">
+        <span className="text-sm font-bold text-blue-600">1</span>
+        <div className="h-5 w-0.5 bg-blue-400" />
+        <div className="w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-t-[8px] border-t-blue-400" />
+        <span className="text-[10px] font-mono text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-300">
+          JOIN
+        </span>
+        <div className="w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-b-[8px] border-b-orange-400" />
+        <div className="h-5 w-0.5 bg-orange-400" />
+        <span className="text-sm font-bold text-orange-600">N</span>
+      </div>
+
+      {/* Desktop — horizontal connector between tables */}
+      <div className="hidden md:flex flex-col items-center shrink-0 pt-8 gap-0.5 w-14">
+        <span className="text-sm font-bold text-blue-600 mb-1">1</span>
+        <div className="w-full h-0.5 bg-blue-400" />
+        <div className="flex flex-col items-center -mt-0.5">
+          <div className="w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-t-[8px] border-t-blue-400" />
+        </div>
+        <span className="text-[9px] font-mono text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-300 my-1">JOIN</span>
+        <div className="flex flex-col items-center -mb-0.5">
+          <div className="w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-b-[8px] border-b-orange-400" />
+        </div>
+        <div className="w-full h-0.5 bg-orange-400" />
+        <span className="text-sm font-bold text-orange-600 mt-1">N</span>
+      </div>
+    </>
+  );
+}
+
 function ERDiagram() {
   return (
-    <div className="flex flex-col gap-4 h-full">
+    <div className="flex flex-col gap-4 h-full min-w-0">
       <p className="text-[10px] text-slate-400 uppercase tracking-widest font-bold text-center">
         Entity Relationship Diagram
       </p>
 
-      <div className="flex items-start gap-2 flex-1">
-        {/* test_runs */}
-        <div className="flex-1 border-2 border-blue-400 rounded-lg overflow-hidden min-w-0">
+      <div className="flex flex-col md:flex-row md:items-start gap-2 md:gap-2 flex-1 min-w-0">
+        <div className="flex-1 border-2 border-blue-400 rounded-lg overflow-hidden min-w-0 w-full">
           <div className="bg-blue-600 px-3 py-2 text-xs font-bold text-white text-center tracking-wide">
             test_runs
           </div>
@@ -498,23 +556,9 @@ function ERDiagram() {
           </div>
         </div>
 
-        {/* Connector */}
-        <div className="flex flex-col items-center shrink-0 pt-8 gap-0.5 w-14">
-          <span className="text-sm font-bold text-blue-600 mb-1">1</span>
-          <div className="w-full h-0.5 bg-blue-400" />
-          <div className="flex flex-col items-center -mt-0.5">
-            <div className="w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-t-[8px] border-t-blue-400" />
-          </div>
-          <span className="text-[9px] font-mono text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-300 my-1">JOIN</span>
-          <div className="flex flex-col items-center -mb-0.5">
-            <div className="w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-b-[8px] border-b-orange-400" />
-          </div>
-          <div className="w-full h-0.5 bg-orange-400" />
-          <span className="text-sm font-bold text-orange-600 mt-1">N</span>
-        </div>
+        <ERConnector />
 
-        {/* test_run_components */}
-        <div className="flex-1 border-2 border-orange-400 rounded-lg overflow-hidden min-w-0">
+        <div className="flex-1 border-2 border-orange-400 rounded-lg overflow-hidden min-w-0 w-full">
           <div className="bg-orange-600 px-3 py-2 text-xs font-bold text-white text-center tracking-wide">
             test_run_components
           </div>
@@ -564,7 +608,7 @@ function SqlFlipCard() {
       </div>
 
       {/* Flip container */}
-      <div className="relative flex-1" style={{ perspective: "1200px", minHeight: "420px" }}>
+      <div className="relative flex-1 min-h-[280px] md:min-h-[420px]" style={{ perspective: "1200px" }}>
         <div
           className="absolute inset-0 w-full h-full"
           style={{
@@ -610,7 +654,7 @@ function DocumentModelPanel() {
           <span className="text-sm font-bold text-emerald-800">MongoDB — Embedded document</span>
           <span className="text-[11px] text-emerald-600 font-mono font-semibold">Atlas</span>
         </div>
-        <pre className="text-xs text-slate-700 p-4 overflow-auto leading-relaxed bg-slate-50 flex-1" style={{ minHeight: "420px" }}>
+        <pre className="text-xs text-slate-700 p-4 overflow-auto leading-relaxed bg-slate-50 flex-1 min-h-[280px] md:min-h-[420px]">
           <JsonDoc code={MDB_DOC} />
         </pre>
         <div className="bg-emerald-50 px-4 py-2 text-[11px] text-emerald-700 border-t border-emerald-200 font-semibold shrink-0">
@@ -903,8 +947,8 @@ function BenefitFlipCard({ b }: { b: (typeof BENEFITS)[0] }) {
   const PETROL = "#009999";
   return (
     <div
-      className="cursor-pointer"
-      style={{ perspective: "1000px", height: "210px" }}
+      className="cursor-pointer h-[220px] sm:h-[210px]"
+      style={{ perspective: "1000px" }}
       onClick={() => setFlipped((f) => !f)}
       title={flipped ? "Click to see MongoDB advantage" : "Click to compare with relational"}
     >

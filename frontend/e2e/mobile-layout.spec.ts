@@ -94,6 +94,17 @@ test.describe("Mobile layout (iPhone)", () => {
       timeout: 20_000,
     });
     await expectNoHorizontalOverflow(page);
+
+    // Flow boxes stack vertically on phone (no side-by-side cram)
+    const bmc = page.getByText("BMC Device", { exact: true }).first();
+    const emit = page.getByText("emit_tests.py", { exact: true }).first();
+    await expect(bmc).toBeVisible();
+    await expect(emit).toBeVisible();
+    const bmcBox = await bmc.boundingBox();
+    const emitBox = await emit.boundingBox();
+    expect(bmcBox && emitBox).toBeTruthy();
+    expect(bmcBox!.y).toBeLessThan(emitBox!.y);
+
     await page.screenshot({ path: path.join(ARTIFACTS, "06-architecture.png"), fullPage: true });
   });
 

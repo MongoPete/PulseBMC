@@ -291,9 +291,13 @@ export default function AlertsPage() {
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-5">
         <div className="min-w-0">
           <h1 className="text-lg sm:text-xl font-bold text-slate-800">Open Alerts</h1>
-          <div className="text-sm text-slate-500 mt-0.5 flex items-center gap-1 flex-wrap">
-            Raised when loopback fault rate exceeds threshold
-            {queryInfo && <QueryTooltip queryInfo={queryInfo as Parameters<typeof QueryTooltip>[0]["queryInfo"]} label="query" />}
+          <div className="text-sm text-slate-500 mt-0.5">
+            <p>Raised when loopback fault rate exceeds threshold</p>
+            {queryInfo && (
+              <div className="mt-1.5">
+                <QueryTooltip queryInfo={queryInfo as Parameters<typeof QueryTooltip>[0]["queryInfo"]} />
+              </div>
+            )}
           </div>
         </div>
         <span className="text-xs border border-slate-200 px-2.5 py-1 rounded-full bg-white text-slate-600 shrink-0 self-start">
