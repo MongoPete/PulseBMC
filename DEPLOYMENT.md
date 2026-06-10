@@ -48,10 +48,8 @@ cd backend && source .venv/bin/activate && python seed/seed_data.py
    | Variable | Notes |
    |----------|-------|
    | `AUTH_SECRET` | `openssl rand -base64 32` |
-   | `DEMO_USER` | Primary demo login email (e.g. internal tester) |
-   | `DEMO_USER_PASSWORD` | Password for `DEMO_USER` |
-   | `CUSTOMER_USER` | Customer POC login email (optional second account) |
-   | `CUSTOMER_USER_PASSWORD` | Password for `CUSTOMER_USER` |
+   | `DEMO_USER` | Customer login email (`Ajin@test.com`) |
+   | `DEMO_USER_PASSWORD` | Customer login password |
    | `API_URL` | `https://api.yourdomain.com` |
    | `BACKEND_API_KEY` | Must match Railway |
    | `NEXT_PUBLIC_SIM_SESSION_MODE` | `true` — shows Start live demo; hides manual simulator controls (optional if Railway sets `SIM_SESSION_MODE` — UI auto-detects via `/api/demo/state`) |
@@ -98,22 +96,23 @@ With `SIM_SESSION_MODE=true` (Railway) and `NEXT_PUBLIC_SIM_SESSION_MODE=true` (
 ```
 
 Manual env editing still works — see `backend/.env.example` and `frontend/.env.example`.
-Login with `DEMO_USER` / `DEMO_USER_PASSWORD` (and optionally `CUSTOMER_USER` / `CUSTOMER_USER_PASSWORD`) after setup completes.
+Login with `DEMO_USER` / `DEMO_USER_PASSWORD` after setup completes.
 
 ## 6. Customer handoff
 
 Share:
 
-- URL: `https://demo.yourdomain.com`
-- Customer login: values from `CUSTOMER_USER` / `CUSTOMER_USER_PASSWORD` on Vercel (or `DEMO_USER` if only one account is configured)
+- URL: `https://pulse-bmc.vercel.app` (or your custom domain)
+- **Email:** `Ajin@test.com`
+- **Password:** set in Vercel as `DEMO_USER_PASSWORD` (do not commit)
 
-**Production (pulse-bmc.vercel.app) — set on Vercel → Settings → Environment Variables:**
+**Vercel → Settings → Environment Variables (Production):**
 
 | Variable | Value |
 |----------|-------|
-| `CUSTOMER_USER` | `Ajin@test.com` |
-| `CUSTOMER_USER_PASSWORD` | *(customer password — set in dashboard only, not in git)* |
+| `DEMO_USER` | `Ajin@test.com` |
+| `DEMO_USER_PASSWORD` | *(customer password)* |
 
-Redeploy after saving env vars. Internal e2e can keep using `DEMO_USER` / `DEMO_USER_PASSWORD`.
+Redeploy after updating env vars.
 
 Do **not** share repo access, `.env` files, or internal `assets/` / `.cursor/` content.
