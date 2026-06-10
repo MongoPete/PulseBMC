@@ -102,7 +102,7 @@ export default function SimSessionBanner({ compact = false }: Props) {
       }}
     >
       <div className="px-4 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div>
+        <div className="min-w-0">
           <div className="flex items-center gap-2">
             <span
               className={`w-2.5 h-2.5 rounded-full ${
@@ -122,13 +122,13 @@ export default function SimSessionBanner({ compact = false }: Props) {
               : "Start a session to stream loopback test telemetry for this kiosk visit only. Nothing runs until you click Start."}
           </p>
         </div>
-        <div className="shrink-0">
+        <div className="shrink-0 w-full sm:w-auto">
           {active ? (
             <button
               type="button"
               onClick={onStop}
               disabled={busy}
-              className="text-sm font-semibold px-4 py-2 rounded-lg border border-amber-300 text-amber-800 hover:bg-amber-50 disabled:opacity-50"
+              className="w-full sm:w-auto text-sm font-semibold px-4 py-2.5 rounded-lg border border-amber-300 text-amber-800 hover:bg-amber-50 disabled:opacity-50 min-h-[44px]"
             >
               {busy ? "Stopping…" : "End live demo"}
             </button>
@@ -137,7 +137,7 @@ export default function SimSessionBanner({ compact = false }: Props) {
               type="button"
               onClick={onStart}
               disabled={busy}
-              className="text-sm font-semibold px-4 py-2 rounded-lg text-white disabled:opacity-50"
+              className="w-full sm:w-auto text-sm font-semibold px-4 py-2.5 rounded-lg text-white disabled:opacity-50 min-h-[44px]"
               style={{ background: SIEMENS_PETROL }}
             >
               {busy ? "Starting…" : "Start live demo"}

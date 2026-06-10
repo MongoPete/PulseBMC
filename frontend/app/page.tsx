@@ -7,6 +7,7 @@ import LiveFeed from "@/components/LiveFeed";
 import SimSessionBanner from "@/components/SimSessionBanner";
 import ConceptBar from "@/components/ConceptBar";
 import { useSessionMode } from "@/lib/sessionMode";
+import PageShell, { PageMain } from "@/components/PageShell";
 import RuntimeDebugPanel from "@/components/RuntimeDebugPanel";
 import type { LedState } from "@/components/LedIndicator";
 import LedIndicator from "@/components/LedIndicator";
@@ -76,20 +77,20 @@ function DeviceDrawer({
 
   return (
     <>
-      {/* Backdrop */}
-      <div className="fixed inset-0 z-30 bg-black/10" onClick={onClose} />
+      {/* Backdrop — above bottom nav on phone */}
+      <div className="fixed inset-0 z-[45] bg-black/20 md:bg-black/10" onClick={onClose} />
 
-      {/* Drawer */}
+      {/* Drawer — full screen on phone, side panel on desktop */}
       <aside
-        className="fixed right-0 top-12 bottom-0 z-40 w-96 bg-white border-l shadow-md flex flex-col"
+        className="fixed inset-0 z-50 md:inset-auto md:right-0 md:top-12 md:bottom-0 md:w-96 md:max-w-[100vw] bg-white md:border-l shadow-md flex flex-col pt-[env(safe-area-inset-top,0px)] md:pt-0"
         style={{ borderColor: "#e2e8f0" }}
       >
         {/* Header */}
-        <div className="flex items-start justify-between px-5 py-4 border-b" style={{ borderColor: "#e2e8f0" }}>
-          <div className="flex items-start gap-3">
+        <div className="flex items-start justify-between px-4 sm:px-5 py-4 border-b shrink-0" style={{ borderColor: "#e2e8f0" }}>
+          <div className="flex items-start gap-3 min-w-0">
             <LedIndicator state={ledState} size="md" />
-            <div>
-              <p className="font-semibold text-slate-800 text-base">{deviceId}</p>
+            <div className="min-w-0">
+              <p className="font-semibold text-slate-800 text-base truncate">{deviceId}</p>
               {device && (
                 <>
                   <p className="text-xs text-slate-500 mt-0.5">{device.hostname}</p>
@@ -104,7 +105,11 @@ function DeviceDrawer({
               )}
             </div>
           </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-700 text-xl leading-none mt-0.5">
+          <button
+            onClick={onClose}
+            aria-label="Close device panel"
+            className="text-slate-400 hover:text-slate-700 text-2xl leading-none mt-0.5 w-10 h-10 flex items-center justify-center shrink-0"
+          >
             ×
           </button>
         </div>
@@ -262,8 +267,11 @@ function DeviceDrawer({
           )}
         </div>
 
-        {/* Action buttons */}
-        <div className="px-5 py-4 border-t space-y-2" style={{ borderColor: "#e2e8f0" }}>
+        {/* Action buttons — sticky on mobile for thumb reach */}
+        <div
+          className="px-4 sm:px-5 py-4 border-t space-y-2 shrink-0 bg-white pb-[max(1rem,env(safe-area-inset-bottom))] md:pb-4"
+          style={{ borderColor: "#e2e8f0" }}
+        >
           <div className="grid grid-cols-2 gap-2">
             <button
               onClick={() => onAction("analysis")}
@@ -453,27 +461,27 @@ export default function FleetPage() {
   const amberCount = Object.values(liveStates).filter((s) => s === "amber").length;
 
   return (
-    <div>
+    <PageShell>
       <ConceptBar />
-      <main className="max-w-[1400px] mx-auto px-4 py-6">
+      <PageMain maxWidth="fleet">
         {sessionMode && <SimSessionBanner />}
         {/* Header */}
-        <div className="flex items-start justify-between mb-5 gap-4 flex-wrap">
-          <div>
-            <h1 className="text-xl font-bold text-slate-800">Fleet Overview</h1>
-            <p className="text-sm text-slate-500 mt-0.5">
-              {devices.length} devices
+        <div className="flex items-start justify-between mb-4 sm:mb-5 gap-3 flex-wrap">
+          <div className="min-w-0">
+            <h1 className="text-lg sm:text-xl font-bold text-slate-800">Fleet Overview</h1>
+            <p className="text-xs sm:text-sm text-slate-500 mt-0.5 flex flex-wrap gap-x-1 gap-y-0.5">
+              <span>{devices.length} devices</span>
               {amberCount > 0 && (
-                <span className="text-amber-600 mx-1">· {amberCount} testing</span>
+                <span className="text-amber-600">· {amberCount} testing</span>
               )}
               {failureCount > 0 && (
-                <span className="text-red-600 mx-1">· {failureCount} fault{failureCount !== 1 ? "s" : ""}</span>
+                <span className="text-red-600">· {failureCount} fault{failureCount !== 1 ? "s" : ""}</span>
               )}
               {lastRefresh && (
-                <span className="text-slate-400 ml-1">· {lastRefresh.toLocaleTimeString()}</span>
+                <span className="text-slate-400">· {lastRefresh.toLocaleTimeString()}</span>
               )}
               {simulatorRunning === false && (
-                <span className="text-slate-400 ml-1">· polling paused</span>
+                <span className="text-slate-400">· polling paused</span>
               )}
             </p>
           </div>
@@ -495,7 +503,7 @@ export default function FleetPage() {
         </div>
 
         {/* Legend — transient vs sticky vs operator-latched (Aaron) */}
-        <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-slate-500 mb-6">
+        <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-start sm:items-center gap-x-4 gap-y-2 text-xs text-slate-500 mb-5 sm:mb-6">
           <span className="flex items-center gap-1.5">
             <span className="w-3 h-3 rounded-full bg-green-500 inline-block" /> Healthy
           </span>
@@ -515,7 +523,8 @@ export default function FleetPage() {
           <span className="flex items-center gap-1.5">
             <span className="w-3 h-3 rounded-full bg-slate-300 inline-block" /> Offline / isolated
           </span>
-          <span className="text-slate-400">· Sticky mode (sim): hardware latches red until reset · Right-click for actions</span>
+          <span className="col-span-2 sm:col-auto text-slate-400 sm:hidden">Tap LED · ⋮ for actions</span>
+          <span className="hidden sm:inline text-slate-400">· Sticky mode (sim): hardware latches red until reset · Right-click for actions</span>
         </div>
 
         {/* Scenario Controls (collapsible) — hidden in session mode; use Start live demo banner */}
@@ -549,12 +558,12 @@ export default function FleetPage() {
             <span className="text-slate-400 text-xs">{liveFeedOpen ? "▾ hide" : "▸ show"}</span>
           </button>
           {liveFeedOpen && (
-            <div style={{ height: 300 }}>
+            <div className="h-[min(50vh,320px)] sm:h-[300px]">
               <LiveFeed />
             </div>
           )}
         </div>
-      </main>
+      </PageMain>
       <RuntimeDebugPanel
         title="Fleet Runtime"
         metrics={{
@@ -578,6 +587,6 @@ export default function FleetPage() {
           isolating={isolatingDeviceId === drawerDeviceId}
         />
       )}
-    </div>
+    </PageShell>
   );
 }

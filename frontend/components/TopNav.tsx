@@ -36,56 +36,72 @@ export default function TopNav() {
   };
 
   return (
-    <nav className="sticky top-0 z-40" style={{ background: SIEMENS_DARK }}>
-      <div className="max-w-7xl mx-auto px-4 h-12 flex items-center justify-between">
-        {/* Left: Brand + nav links */}
-        <div className="flex items-center gap-8">
-          <Link href="/" className="flex items-center gap-3 shrink-0">
-            {/* SIEMENS wordmark — same size/weight as SoCPulse */}
-            <span style={{
+    <nav
+      className="sticky top-0 z-40"
+      style={{
+        background: SIEMENS_DARK,
+        paddingTop: "env(safe-area-inset-top, 0px)",
+      }}
+    >
+      <div className="max-w-7xl mx-auto px-3 sm:px-4 h-12 flex items-center justify-between gap-2">
+        {/* Brand — compact on phone, full lockup on sm+ */}
+        <Link href="/" className="flex items-center gap-2 sm:gap-3 shrink-0 min-w-0">
+          <span
+            className="hidden sm:inline"
+            style={{
               fontFamily: "Arial, sans-serif",
               fontWeight: 700,
               letterSpacing: "0.18em",
               fontSize: "14px",
               color: SIEMENS_PETROL,
               textTransform: "uppercase",
-            }}>
-              SIEMENS
-            </span>
-            <span className="text-slate-500 text-sm">×</span>
-            <span style={{
+            }}
+          >
+            SIEMENS
+          </span>
+          <span className="hidden sm:inline text-slate-500 text-sm">×</span>
+          <span
+            style={{
               fontFamily: "Arial, sans-serif",
               fontWeight: 700,
               fontSize: "14px",
               color: "#ffffff",
               letterSpacing: "-0.01em",
-            }}>
-              SoC<span style={{ color: SIEMENS_PETROL }}>Pulse</span>
-            </span>
-          </Link>
+            }}
+          >
+            SoC<span style={{ color: SIEMENS_PETROL }}>Pulse</span>
+          </span>
+        </Link>
 
-          <div className="flex items-center gap-5">
-            {navLink("/", "Fleet", "fleet-nav")}
-            {navLink("/alerts", "Alerts", "alerts-nav")}
-            {navLink("/explore", "Explorer", "explore-nav")}
-            {navLink("/architecture", "How It Works")}
-          </div>
+        {/* Desktop nav links — bottom tab bar on mobile */}
+        <div className="hidden md:flex items-center gap-5 flex-1 justify-center">
+          {navLink("/", "Fleet", "fleet-nav")}
+          {navLink("/alerts", "Alerts", "alerts-nav")}
+          {navLink("/explore", "Explorer", "explore-nav")}
+          {navLink("/architecture", "How It Works")}
         </div>
 
         {/* Right: Atlas badge, clock, sign out */}
-        <div className="flex items-center gap-4">
-          <LiveClock dark />
+        <div className="flex items-center gap-2 sm:gap-4 shrink-0">
+          <div className="md:hidden flex items-center gap-1" title="Powered by MongoDB Atlas">
+            <span style={{ color: MONGODB_GREEN, fontSize: "10px" }}>●</span>
+            <span className="text-[10px] font-bold" style={{ color: MONGODB_GREEN }}>Atlas</span>
+          </div>
+          <div className="hidden lg:block">
+            <LiveClock dark />
+          </div>
 
-          {/* Powered by MongoDB Atlas */}
-          <div className="flex items-center gap-1.5 border-l border-slate-700 pl-4">
+          <div className="hidden md:flex items-center gap-1.5 border-l border-slate-700 pl-4">
             <span style={{ color: MONGODB_GREEN, fontSize: "10px" }}>●</span>
             <span className="text-xs text-slate-300">Powered by</span>
-            <span className="text-sm font-bold" style={{ color: MONGODB_GREEN }}>MongoDB Atlas</span>
+            <span className="text-sm font-bold" style={{ color: MONGODB_GREEN }}>
+              MongoDB Atlas
+            </span>
           </div>
 
           <button
             onClick={onSignOut}
-            className="text-xs text-slate-400 hover:text-white transition-colors border border-slate-700 rounded px-2.5 py-1 hover:border-slate-500"
+            className="text-xs text-slate-400 hover:text-white transition-colors border border-slate-700 rounded px-2.5 py-1.5 min-h-[36px] hover:border-slate-500"
           >
             Sign out
           </button>

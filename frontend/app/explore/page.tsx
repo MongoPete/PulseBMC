@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { JsonLight, SqlLight } from "@/components/SyntaxHighlight";
 import ConceptBar from "@/components/ConceptBar";
+import PageShell, { PageMain } from "@/components/PageShell";
 import { api } from "@/lib/api";
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -454,9 +455,9 @@ export default function ExplorePage() {
   ];
 
   return (
-    <>
+    <PageShell>
       <ConceptBar />
-    <main className="max-w-5xl mx-auto px-4 py-6">
+      <PageMain>
       {/* Header */}
       <div className="flex items-start justify-between mb-5 gap-4 flex-wrap">
         <div>
@@ -472,19 +473,19 @@ export default function ExplorePage() {
 
       {/* Input + time scope */}
       <div id="explore-input-area" className="mb-5">
-        <div className="flex gap-2 mb-2">
+        <div className="flex flex-col sm:flex-row gap-2 mb-2">
           <input
             ref={inputRef}
             value={question}
             onChange={(e) => setQuestion(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && question && ask(question)}
-            placeholder="e.g. Show loopback runs where pcie_card_1 failed with LB_TIMEOUT"
-            className="flex-1 bg-white border border-slate-300 rounded-lg px-4 py-3 text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-400"
+            placeholder="Ask about loopback failures, devices, alerts…"
+            className="flex-1 min-w-0 bg-white border border-slate-300 rounded-lg px-4 py-3 text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-400"
           />
           <button
             onClick={() => question && ask(question)}
             disabled={!question || loading}
-            className="disabled:opacity-40 text-white text-sm font-medium px-6 py-3 rounded-lg transition-colors whitespace-nowrap"
+            className="w-full sm:w-auto shrink-0 disabled:opacity-40 text-white text-sm font-medium px-6 py-3 rounded-lg transition-colors whitespace-nowrap min-h-[44px]"
             style={{ background: "#009999" }}
           >
             {loading ? (
@@ -536,16 +537,16 @@ export default function ExplorePage() {
       <div id="starter-questions" className="mb-5">
         <button
           onClick={() => setRibbonOpen((o) => !o)}
-          className="w-full flex items-center justify-between px-4 py-2.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 transition-colors"
+          className="w-full flex items-center justify-between gap-2 px-4 py-3 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 transition-colors text-left min-h-[44px]"
         >
-          <div className="flex items-center gap-2">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-0.5 sm:gap-2 min-w-0">
             <span className="text-xs font-semibold text-slate-600">Sample queries</span>
-            <span className="text-[10px] text-slate-400">— each exercises a different MongoDB feature</span>
-            <span className="text-[10px] font-mono bg-slate-100 border border-slate-200 text-slate-500 px-1.5 py-0.5 rounded">
+            <span className="hidden sm:inline text-[10px] text-slate-400 truncate">— each exercises a different MongoDB feature</span>
+            <span className="text-[10px] font-mono bg-slate-100 border border-slate-200 text-slate-500 px-1.5 py-0.5 rounded w-fit">
               {STARTER_QUESTIONS.length} queries
             </span>
           </div>
-          <span className="text-slate-400 text-xs font-mono">{ribbonOpen ? "▾ hide" : "▸ show"}</span>
+          <span className="text-slate-400 text-xs font-mono shrink-0">{ribbonOpen ? "▾ hide" : "▸ show"}</span>
         </button>
 
         {ribbonOpen && (
@@ -690,7 +691,7 @@ export default function ExplorePage() {
       )}
 
       {!result && <div id="query-explainer" className="hidden" />}
-    </main>
-    </>
+      </PageMain>
+    </PageShell>
   );
 }

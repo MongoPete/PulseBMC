@@ -9,10 +9,17 @@
   --color-siemens-amber: #F5A623;
 }
 
+html {
+  height: 100%;
+  overflow-x: clip;
+}
+
 body {
   background: #F4F7F9;
   color: #1B1B1B;
   font-family: Arial, Helvetica, sans-serif;
+  min-height: 100%;
+  overflow-x: clip;
 }
 
 /* One-shot ring that plays each time a loopback test is captured for a device */
@@ -55,4 +62,30 @@ body {
 
 .failure-pulse {
   animation: failure-pulse 2s ease-in-out infinite;
+}
+
+/* Bottom tab bar clearance + iOS home indicator (h-16 tab bar) */
+.mobile-safe-bottom {
+  padding-bottom: calc(4rem + env(safe-area-inset-bottom, 0px));
+}
+
+@media (min-width: 768px) {
+  .mobile-safe-bottom {
+    padding-bottom: 0;
+  }
+}
+
+/* Thin horizontal scrollbars for concept cards on phone */
+.scrollbar-thin {
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 transparent;
+}
+
+.scrollbar-thin::-webkit-scrollbar {
+  height: 4px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 9999px;
 }

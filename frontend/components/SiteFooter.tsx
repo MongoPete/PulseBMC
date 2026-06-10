@@ -8,7 +8,7 @@ export default function SiteFooter() {
   if (pathname === "/login") return null;
 
   return (
-    <footer style={{ background: SIEMENS_DARK, borderTop: "1px solid #1a1a3e" }}>
+    <footer className="hidden md:block" style={{ background: SIEMENS_DARK, borderTop: "1px solid #1a1a3e" }}>
       <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between flex-wrap gap-3">
         {/* Brand lockup */}
         <div className="flex items-center gap-3">

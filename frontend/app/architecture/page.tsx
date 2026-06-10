@@ -1,6 +1,7 @@
 "use client";
 import { useState, type ReactNode } from "react";
 import ConceptBar from "@/components/ConceptBar";
+import PageShell, { PageMain } from "@/components/PageShell";
 
 // ── Reusable primitives ──────────────────────────────────────────────────────
 
@@ -1223,13 +1224,13 @@ function AlternativeStacksSection() {
 
 export default function ArchitecturePage() {
   return (
-    <div className="bg-[#F4F7F9] min-h-screen">
+    <PageShell className="bg-[#F4F7F9]">
       <ConceptBar />
-      <main className="max-w-6xl mx-auto px-4 py-8 space-y-14">
+      <PageMain maxWidth="doc" className="space-y-10 sm:space-y-14 py-6 sm:py-8">
 
         {/* Hero */}
         <div>
-          <h1 className="text-3xl font-bold text-slate-900">How It Works</h1>
+          <h1 className="text-2xl sm:text-3xl font-bold text-slate-900">How It Works</h1>
           <p className="text-slate-600 mt-2 max-w-2xl text-sm leading-relaxed">
             SoCPulse stores hardware telemetry in MongoDB Atlas — a document database that keeps related data together (no JOINs), streams live changes to the browser, and runs automated fault isolation inside the same cluster.
           </p>
@@ -1300,7 +1301,7 @@ export default function ArchitecturePage() {
         {/* 6. Alternative stacks */}
         <AlternativeStacksSection />
 
-      </main>
-    </div>
+      </PageMain>
+    </PageShell>
   );
 }

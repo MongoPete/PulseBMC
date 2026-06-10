@@ -52,8 +52,17 @@ export default function LiveFeed() {
   const [running, setRunning] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(false);
   const sessionMode = useSessionMode();
-  const bottomRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const pinnedToBottomRef = useRef(true);
   const counterRef = useRef(0);
+
+  const updatePinned = () => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const threshold = 32;
+    pinnedToBottomRef.current =
+      el.scrollHeight - el.scrollTop - el.clientHeight <= threshold;
+  };
 
   useEffect(() => {
     return subscribeSimState(setRunning);
@@ -102,29 +111,32 @@ export default function LiveFeed() {
     };
   }, []);
 
-  // Auto-scroll to bottom on new events
+  // Auto-scroll only while the user is already at the bottom (chat-style).
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (!pinnedToBottomRef.current) return;
+    const el = scrollRef.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
   }, [events]);
 
   return (
     <div className="flex flex-col h-full bg-[#0d1117] border border-slate-700/50 rounded-lg overflow-hidden">
       {/* Header */}
-      <div className="flex items-center justify-between px-3 py-2 border-b border-slate-700/50 bg-slate-900/60 shrink-0">
-        <span className="flex items-center gap-2">
-          <span className="text-xs font-semibold text-slate-300 tracking-wide">Live Event Feed</span>
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between px-3 py-2 border-b border-slate-700/50 bg-slate-900/60 shrink-0 min-w-0">
+        <span className="flex items-center gap-2 min-w-0 flex-wrap">
+          <span className="text-xs font-semibold text-slate-300 tracking-wide shrink-0">Live Event Feed</span>
           <span
-            className={`text-[10px] px-1.5 py-px rounded-full border ${
+            className={`text-[10px] px-1.5 py-px rounded-full border shrink-0 ${
               running
                 ? "border-emerald-700/50 text-emerald-300 bg-emerald-900/20"
                 : "border-slate-600/50 text-slate-400 bg-slate-800/40"
             }`}
             title="Loopback simulator process status"
           >
-            simulator {running === null ? "…" : running ? "running" : "stopped"}
+            sim {running === null ? "…" : running ? "on" : "off"}
           </span>
         </span>
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1 flex-wrap shrink-0">
           {!sessionMode && (
             <>
               {running ? (
@@ -160,14 +172,18 @@ export default function LiveFeed() {
       </div>
 
       {/* Column headers */}
-      <div className="flex items-center gap-2 px-3 py-1.5 border-b border-slate-800/60 bg-slate-900/30 shrink-0">
-        <span className="text-[10px] text-slate-600 w-[80px]">time</span>
-        <span className="text-[10px] text-slate-600 w-[38px]">type</span>
-        <span className="text-[10px] text-slate-600">event</span>
+      <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 border-b border-slate-800/60 bg-slate-900/30 shrink-0 min-w-0">
+        <span className="text-[10px] text-slate-600 w-14 sm:w-[80px] shrink-0">time</span>
+        <span className="text-[10px] text-slate-600 w-9 sm:w-[38px] shrink-0">type</span>
+        <span className="text-[10px] text-slate-600 min-w-0">event</span>
       </div>
 
       {/* Scrollable log */}
-      <div className="flex-1 overflow-y-auto font-mono text-xs px-0 py-1 space-y-px">
+      <div
+        ref={scrollRef}
+        onScroll={updatePinned}
+        className="flex-1 overflow-y-auto font-mono text-xs px-0 py-1 space-y-px"
+      >
         {events.length === 0 && (
           <p className="text-slate-600 text-center mt-6 text-xs font-sans">
             Waiting for events…
@@ -178,21 +194,20 @@ export default function LiveFeed() {
           return (
             <div
               key={ev.id}
-              className="flex items-start gap-2 px-3 py-0.5 hover:bg-slate-800/30 transition-colors"
+              className="flex items-start gap-1.5 sm:gap-2 px-3 py-0.5 hover:bg-slate-800/30 transition-colors min-w-0"
             >
-              <span className="text-slate-600 shrink-0 w-[80px] tabular-nums">{ev.ts}</span>
-              <span className="shrink-0 w-[38px]">
+              <span className="text-slate-600 shrink-0 w-14 sm:w-[80px] tabular-nums text-[10px] sm:text-xs">{ev.ts}</span>
+              <span className="shrink-0 w-9 sm:w-[38px] hidden sm:block">
                 <EventTypeTag type={ev.event_type} />
               </span>
-              <span className={`${color} truncate`}>{text}</span>
+              <span className={`${color} min-w-0 break-words sm:truncate text-[11px] sm:text-xs`}>{text}</span>
             </div>
           );
         })}
-        <div ref={bottomRef} />
       </div>
 
       {/* Footer count */}
-      <div className="px-3 py-1.5 border-t border-slate-800/60 bg-slate-900/30 shrink-0 flex items-center justify-between">
+      <div className="px-3 py-1.5 border-t border-slate-800/60 bg-slate-900/30 shrink-0 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between min-w-0">
         <span className="text-[10px] text-slate-600">
           {events.length} event{events.length !== 1 ? "s" : ""} · last {MAX_EVENTS} shown
         </span>

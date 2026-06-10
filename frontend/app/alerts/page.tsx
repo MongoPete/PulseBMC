@@ -7,6 +7,7 @@ import WorkOrderCard from "@/components/WorkOrderCard";
 import RetrievedContextPanel from "@/components/RetrievedContextPanel";
 import LedIndicator from "@/components/LedIndicator";
 import ConceptBar from "@/components/ConceptBar";
+import PageShell, { PageMain } from "@/components/PageShell";
 import SimSessionBanner from "@/components/SimSessionBanner";
 import { useSessionMode } from "@/lib/sessionMode";
 import ChangeStreamLiveLabel from "@/components/ChangeStreamLiveLabel";
@@ -282,19 +283,20 @@ export default function AlertsPage() {
     : alerts;
 
   return (
-    <main className="max-w-5xl mx-auto px-4 py-6">
+    <PageShell>
       <ConceptBar />
+      <PageMain>
       {sessionMode && <SimSessionBanner compact />}
       {/* Page header */}
-      <div className="flex items-center justify-between mb-5">
-        <div>
-          <h1 className="text-xl font-bold text-slate-800">Open Alerts</h1>
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-5">
+        <div className="min-w-0">
+          <h1 className="text-lg sm:text-xl font-bold text-slate-800">Open Alerts</h1>
           <div className="text-sm text-slate-500 mt-0.5 flex items-center gap-1 flex-wrap">
             Raised when loopback fault rate exceeds threshold
             {queryInfo && <QueryTooltip queryInfo={queryInfo as Parameters<typeof QueryTooltip>[0]["queryInfo"]} label="query" />}
           </div>
         </div>
-        <span className="text-xs border border-slate-200 px-2.5 py-1 rounded-full bg-white text-slate-600">
+        <span className="text-xs border border-slate-200 px-2.5 py-1 rounded-full bg-white text-slate-600 shrink-0 self-start">
           {alerts.length} open
         </span>
       </div>
@@ -702,6 +704,7 @@ export default function AlertsPage() {
           pending_highlight_timers: highlightTimeouts.current.size,
         }}
       />
-    </main>
+      </PageMain>
+    </PageShell>
   );
 }

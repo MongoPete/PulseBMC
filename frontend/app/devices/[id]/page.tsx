@@ -13,6 +13,7 @@ import { fmtTime, fmtDateTime, fmtRelative } from "@/lib/time";
 import { JsonLight } from "@/components/SyntaxHighlight";
 import DocumentViewer from "@/components/DocumentViewer";
 import ConceptBar from "@/components/ConceptBar";
+import PageShell, { PageMain } from "@/components/PageShell";
 import ChangeStreamLiveLabel from "@/components/ChangeStreamLiveLabel";
 import { trackedInterval, trackedTimeout } from "@/lib/runtimeDebug";
 import { subscribeLiveMessages, subscribeLiveStatus } from "@/lib/liveStream";
@@ -220,9 +221,9 @@ export default function DevicePage() {
   }, [ledState, sweepIdx, components]);
 
   return (
-    <>
+    <PageShell>
       <ConceptBar />
-    <main className="max-w-7xl mx-auto px-4 py-6">
+      <PageMain maxWidth="wide">
       {/* Breadcrumb */}
       <div className="flex items-center gap-2 text-sm text-slate-400 mb-4">
         <Link href="/" className="hover:text-slate-700">Fleet</Link>
@@ -734,7 +735,7 @@ export default function DevicePage() {
           rerunning: rerunning ? 1 : 0,
         }}
       />
-    </main>
-    </>
+      </PageMain>
+    </PageShell>
   );
 }

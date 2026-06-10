@@ -43,7 +43,7 @@ export default function RuntimeDebugPanel({
   if (!enabled) return null;
 
   return (
-    <div className="fixed right-3 bottom-3 z-50">
+    <div className="fixed right-3 bottom-[calc(4.25rem+env(safe-area-inset-bottom,0px))] md:bottom-3 z-50">
       {!open ? (
         <button
           onClick={() => setOpen(true)}
