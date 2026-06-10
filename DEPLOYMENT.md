@@ -48,8 +48,10 @@ cd backend && source .venv/bin/activate && python seed/seed_data.py
    | Variable | Notes |
    |----------|-------|
    | `AUTH_SECRET` | `openssl rand -base64 32` |
-   | `DEMO_USER` | Customer login email (`Ajin@test.com`) |
-   | `DEMO_USER_PASSWORD` | Customer login password |
+   | `DEMO_USER` | Customer login — `Ajin@test.com` |
+   | `DEMO_USER_PASSWORD` | Customer password |
+   | `DEMO_USER_2` | Optional internal login — `demopete@test.com` |
+   | `DEMO_USER_PASSWORD_2` | Internal password |
    | `API_URL` | `https://api.yourdomain.com` |
    | `BACKEND_API_KEY` | Must match Railway |
    | `NEXT_PUBLIC_SIM_SESSION_MODE` | `true` — shows Start live demo; hides manual simulator controls (optional if Railway sets `SIM_SESSION_MODE` — UI auto-detects via `/api/demo/state`) |
@@ -96,7 +98,7 @@ With `SIM_SESSION_MODE=true` (Railway) and `NEXT_PUBLIC_SIM_SESSION_MODE=true` (
 ```
 
 Manual env editing still works — see `backend/.env.example` and `frontend/.env.example`.
-Login with `DEMO_USER` / `DEMO_USER_PASSWORD` after setup completes.
+Login with any configured `DEMO_USER*` account after setup completes.
 
 ## 6. Customer handoff
 
@@ -108,10 +110,14 @@ Share:
 
 **Vercel → Settings → Environment Variables (Production):**
 
-| Variable | Value |
-|----------|-------|
-| `DEMO_USER` | `Ajin@test.com` |
-| `DEMO_USER_PASSWORD` | *(customer password)* |
+| Variable | Who | Example |
+|----------|-----|---------|
+| `DEMO_USER` | Customer (Aaron) | `Ajin@test.com` |
+| `DEMO_USER_PASSWORD` | Customer | *(set in dashboard only)* |
+| `DEMO_USER_2` | Internal / e2e (Pete) | `demopete@test.com` |
+| `DEMO_USER_PASSWORD_2` | Internal | *(set in dashboard only)* |
+
+Both accounts can sign in at the same time. Omit `DEMO_USER_2` if you only need one login.
 
 Redeploy after updating env vars.
 

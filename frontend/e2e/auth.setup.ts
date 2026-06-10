@@ -9,7 +9,7 @@ setup("authenticate", async ({ page }) => {
 
   if (!email || !password) {
     throw new Error(
-      "Set E2E_DEMO_USER and E2E_DEMO_PASSWORD (e.g. export before npm run test:e2e:prod)",
+      "Set E2E_DEMO_USER and E2E_DEMO_PASSWORD — use demopete@test.com when DEMO_USER_2 is configured on prod",
     );
   }
 
