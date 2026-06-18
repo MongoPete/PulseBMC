@@ -273,6 +273,8 @@ def main():
                     burst_set = set(demo_state.get("burst_failure_devices", []))
                     trending_set = set(demo_state.get("trending_failure_devices", []))
                     offline = demo_state.get("offline_buffer", False)
+                    raw_fm = demo_state.get("failure_modes") or {}
+                    failure_modes_overlay = raw_fm if isinstance(raw_fm, dict) else {}
                     for d in demo_state.get("reset_devices", []):
                         _sticky_latched.pop(d, None)
                         _degradation_phase.pop(d, None)
@@ -280,8 +282,10 @@ def main():
                         _device_temp_baseline[d] = _HEALTHY_TEMP_TARGET
                 else:
                     burst_set, trending_set, offline = set(), set(), False
+                    failure_modes_overlay = {}
             except Exception:
                 burst_set, trending_set, offline = set(), set(), False
+                failure_modes_overlay = {}
 
             cycle_start = time.time()
 
@@ -294,11 +298,15 @@ def main():
             for device_id, device in devices.items():
                 base_rate = device.get("failure_rate", 0.02)
                 failure_mode = device.get("failure_mode", "none")
+                # POST /demo/set-failure-mode — overrides config baseline until reset
+                ov = failure_modes_overlay.get(device_id)
+                if isinstance(ov, str) and ov in ("none", "intermittent", "sticky", "silent"):
+                    failure_mode = ov
 
                 if device_id in burst_set or (args.burst_failure and device_id == args.burst_failure):
                     fail_rate, force, failure_mode = 1.0, True, "none"
                 elif device_id in trending_set or (args.trending_failure and device_id == args.trending_failure):
-                    fail_rate, force = 0.15, False
+                    fail_rate, force, failure_mode = 0.15, False, "none"
                 else:
                     fail_rate, force = base_rate, False
 

@@ -51,6 +51,7 @@ export const api = {
         offline_buffer: boolean;
         burst_failure_devices: string[];
         trending_failure_devices: string[];
+        failure_modes?: Record<string, string>;
         session_active?: boolean;
         session_mode?: boolean;
         session_id?: string | null;

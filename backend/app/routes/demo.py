@@ -198,6 +198,15 @@ async def reset_fleet():
     _demo_overrides["trending_failure"].clear()
     _demo_overrides["offline_buffer"] = False
 
+    # Clear UI-driven failure_mode overlays so simulator returns to config.json baseline;
+    # queue sticky latch unlock for any device that had an override.
+    if not isinstance(_demo_overrides.get("failure_modes"), dict):
+        _demo_overrides["failure_modes"] = {}
+    fm = _demo_overrides["failure_modes"]
+    for d in list(fm.keys()):
+        _demo_overrides.setdefault("reset_devices", set()).add(d)
+    fm.clear()
+
     if affected:
         # Write a full window of passes per device so the recent-N rate goes to 0%
         pass_docs = []
