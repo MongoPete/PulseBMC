@@ -203,7 +203,8 @@ class SeedRunGenerator:
 
 def make_rag_seed_failure(i: int) -> dict:
     """Pre-embedded historical PCIe loopback timeout failure — the RAG demo retrieves these."""
-    ts = datetime.now(timezone.utc) - timedelta(days=random.randint(1, 14))
+    # Keep within 7 days so Explore "this week" / starter chips still hit LB_TIMEOUT rows
+    ts = datetime.now(timezone.utc) - timedelta(days=random.randint(1, 6))
     duration_ms = 412
     core_results = [
         {"core_id": f"core_{j}", "result": "fail" if j < 2 else "pass", "latency_ms": 7.2, "temp_c": 84.5 if j < 2 else 52.1}
@@ -238,6 +239,371 @@ def make_rag_seed_failure(i: int) -> dict:
         },
         "triggered_by": "seed_rag",
     }
+
+
+def _explore_demo_fixture_runs(now: datetime) -> list[dict]:
+    """
+    Deterministic test_runs in the last ~24h so /explore starter questions and NL
+    examples return rows without relying on RNG from the 48h synthetic history.
+    """
+    def iso(ts: datetime) -> str:
+        return ts.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")
+
+    def cores_pass(lat_ms: float = 2.1, temp_c: float = 49.0) -> list[dict]:
+        return [
+            {"core_id": f"core_{j}", "result": "pass", "latency_ms": lat_ms, "temp_c": temp_c}
+            for j in range(CORES_PER_COMPONENT)
+        ]
+
+    docs: list[dict] = []
+
+    def add(
+        device_id: str,
+        hours_ago: float,
+        status: str,
+        led_state: str,
+        components: list[dict],
+        **extra: object,
+    ) -> None:
+        st = now - timedelta(hours=hours_ago)
+        dur = 400
+        completed = st + timedelta(milliseconds=dur)
+        doc: dict = {
+            "device_id": device_id,
+            "pattern_id": "loopback_v1",
+            "started_at": iso(st),
+            "completed_at": iso(completed),
+            "duration_ms": dur,
+            "status": status,
+            "led_state": led_state,
+            "results": {"overall": status, "components": components},
+            "triggered_by": "seed_explore",
+        }
+        doc.update(extra)
+        docs.append(doc)
+
+    # LB_TIMEOUT on pcie_card_1 (starter + NL)
+    add(
+        "device-015",
+        2.0,
+        "fail",
+        "red",
+        [{
+            "component_id": "pcie_card_1",
+            "result": "fail",
+            "error_code": "LB_TIMEOUT",
+            "core_results": cores_pass(lat_ms=7.0, temp_c=72.0),
+        }]
+        + [
+            {
+                "component_id": cid,
+                "result": "pass",
+                "error_code": None,
+                "core_results": cores_pass(),
+            }
+            for cid in ("pcie_card_2", "pcie_card_3")
+        ],
+        failure_mode="intermittent",
+        true_fault_source="upstream_pcie_controller_A",
+        nvme_smart={
+            "critical_warning": 0,
+            "temperature": 72,
+            "media_errors": 6,
+            "num_err_log_entries": 1,
+            "available_spare": 95,
+            "percentage_used": 4,
+        },
+    )
+
+    # Error code mix: SIGNAL_INTEGRITY_ERR vs CONTINUITY_FAIL (last 7d)
+    add(
+        "device-014",
+        3.5,
+        "fail",
+        "red",
+        [{
+            "component_id": "pcie_card_1",
+            "result": "fail",
+            "error_code": "SIGNAL_INTEGRITY_ERR",
+            "core_results": cores_pass(lat_ms=5.5, temp_c=68.0),
+        }]
+        + [
+            {
+                "component_id": cid,
+                "result": "pass",
+                "error_code": None,
+                "core_results": cores_pass(),
+            }
+            for cid in ("pcie_card_2", "pcie_card_3")
+        ],
+    )
+    add(
+        "device-014",
+        4.0,
+        "fail",
+        "red",
+        [{
+            "component_id": "pcie_card_1",
+            "result": "fail",
+            "error_code": "CONTINUITY_FAIL",
+            "core_results": cores_pass(lat_ms=4.2, temp_c=55.0),
+        }]
+        + [
+            {
+                "component_id": cid,
+                "result": "pass",
+                "error_code": None,
+                "core_results": cores_pass(),
+            }
+            for cid in ("pcie_card_2", "pcie_card_3")
+        ],
+    )
+
+    # Core temp > 80°C on pcie_card_1
+    hot_cores = [
+        {"core_id": "core_0", "result": "fail", "latency_ms": 3.0, "temp_c": 86.0},
+        {"core_id": "core_1", "result": "fail", "latency_ms": 2.8, "temp_c": 82.5},
+        {"core_id": "core_2", "result": "pass", "latency_ms": 2.1, "temp_c": 54.0},
+        {"core_id": "core_3", "result": "pass", "latency_ms": 2.0, "temp_c": 53.0},
+    ]
+    add(
+        "device-004",
+        5.0,
+        "fail",
+        "red",
+        [{
+            "component_id": "pcie_card_1",
+            "result": "fail",
+            "error_code": "LOOPBACK_FAIL_TIMING",
+            "core_results": hot_cores,
+        }]
+        + [
+            {
+                "component_id": cid,
+                "result": "pass",
+                "error_code": None,
+                "core_results": cores_pass(),
+            }
+            for cid in ("pcie_card_2", "pcie_card_3")
+        ],
+    )
+
+    # Core latency > 6ms on pcie_card_1 (overall pass)
+    lat_cores = [
+        {"core_id": f"core_{j}", "result": "pass", "latency_ms": 8.2 if j == 0 else 2.0, "temp_c": 48.0}
+        for j in range(CORES_PER_COMPONENT)
+    ]
+    add(
+        "device-009",
+        6.0,
+        "pass",
+        "green",
+        [{
+            "component_id": "pcie_card_1",
+            "result": "pass",
+            "error_code": None,
+            "core_results": lat_cores,
+        }]
+        + [
+            {
+                "component_id": cid,
+                "result": "pass",
+                "error_code": None,
+                "core_results": cores_pass(),
+            }
+            for cid in ("pcie_card_2", "pcie_card_3")
+        ],
+    )
+
+    # Silent: pass + corruption_detected (starter NL)
+    silent_cores = cores_pass()
+    add(
+        "device-012",
+        7.0,
+        "pass",
+        "green",
+        [{
+            "component_id": "pcie_card_1",
+            "result": "pass",
+            "error_code": None,
+            "corruption_detected": True,
+            "corruption_crc": "0xA3F1",
+            "core_results": silent_cores,
+        }]
+        + [
+            {
+                "component_id": cid,
+                "result": "pass",
+                "error_code": None,
+                "core_results": cores_pass(),
+            }
+            for cid in ("pcie_card_2", "pcie_card_3")
+        ],
+        failure_mode="silent",
+        nvme_smart={
+            "critical_warning": 0,
+            "temperature": 52,
+            "media_errors": 1,
+            "num_err_log_entries": 0,
+            "available_spare": 98,
+            "percentage_used": 3,
+        },
+    )
+
+    # Intermittent failure_mode on a fail row (facet + NL)
+    add(
+        "device-003",
+        8.0,
+        "fail",
+        "red",
+        [{
+            "component_id": "pcie_card_1",
+            "result": "fail",
+            "error_code": "LB_TIMEOUT",
+            "core_results": cores_pass(lat_ms=6.5, temp_c=70.0),
+        }]
+        + [
+            {
+                "component_id": cid,
+                "result": "pass",
+                "error_code": None,
+                "core_results": cores_pass(),
+            }
+            for cid in ("pcie_card_2", "pcie_card_3")
+        ],
+        failure_mode="intermittent",
+    )
+
+    # NVMe media_errors spread (highest should be device-006)
+    add(
+        "device-005",
+        9.0,
+        "fail",
+        "red",
+        [{
+            "component_id": "pcie_card_1",
+            "result": "fail",
+            "error_code": "SIGNAL_INTEGRITY_ERR",
+            "core_results": cores_pass(),
+        }]
+        + [
+            {
+                "component_id": cid,
+                "result": "pass",
+                "error_code": None,
+                "core_results": cores_pass(),
+            }
+            for cid in ("pcie_card_2", "pcie_card_3")
+        ],
+        nvme_smart={
+            "critical_warning": 0,
+            "temperature": 61,
+            "media_errors": 88,
+            "num_err_log_entries": 6,
+            "available_spare": 90,
+            "percentage_used": 8,
+        },
+    )
+    add(
+        "device-006",
+        9.5,
+        "fail",
+        "red",
+        [{
+            "component_id": "pcie_card_1",
+            "result": "fail",
+            "error_code": "CONTINUITY_FAIL",
+            "core_results": cores_pass(),
+        }]
+        + [
+            {
+                "component_id": cid,
+                "result": "pass",
+                "error_code": None,
+                "core_results": cores_pass(),
+            }
+            for cid in ("pcie_card_2", "pcie_card_3")
+        ],
+        nvme_smart={
+            "critical_warning": 1,
+            "temperature": 67,
+            "media_errors": 214,
+            "num_err_log_entries": 14,
+            "available_spare": 82,
+            "percentage_used": 11,
+        },
+    )
+
+    # Datacenter rollups: us-east-1 (device-002) vs us-west-2 (device-011) — more fails east
+    def east_fail_components() -> list[dict]:
+        return [
+            {
+                "component_id": "pcie_card_1",
+                "result": "fail",
+                "error_code": "LB_TIMEOUT",
+                "core_results": cores_pass(lat_ms=5.0, temp_c=65.0),
+            },
+            *[
+                {
+                    "component_id": cid,
+                    "result": "pass",
+                    "error_code": None,
+                    "core_results": cores_pass(),
+                }
+                for cid in ("pcie_card_2", "pcie_card_3")
+            ],
+        ]
+
+    for h in (10.0, 11.0, 12.0):
+        add("device-002", h, "fail", "red", east_fail_components())
+    add(
+        "device-011",
+        11.5,
+        "fail",
+        "red",
+        [{
+            "component_id": "pcie_card_1",
+            "result": "fail",
+            "error_code": "CONTINUITY_FAIL",
+            "core_results": cores_pass(),
+        }]
+        + [
+            {
+                "component_id": cid,
+                "result": "pass",
+                "error_code": None,
+                "core_results": cores_pass(),
+            }
+            for cid in ("pcie_card_2", "pcie_card_3")
+        ],
+    )
+
+    # true_fault_source grouping
+    for h in (13.0, 14.0):
+        add(
+            "device-010",
+            h,
+            "fail",
+            "red",
+            [{
+                "component_id": "pcie_card_1",
+                "result": "fail",
+                "error_code": "SIGNAL_INTEGRITY_ERR",
+                "core_results": cores_pass(),
+            }]
+            + [
+                {
+                    "component_id": cid,
+                    "result": "pass",
+                    "error_code": None,
+                    "core_results": cores_pass(),
+                }
+                for cid in ("pcie_card_2", "pcie_card_3")
+            ],
+            true_fault_source="upstream_pcie_controller_B",
+        )
+
+    return docs
 
 
 def main():
@@ -312,6 +678,11 @@ def main():
         if runs:
             db.test_runs.insert_many(runs)
 
+    # Deterministic rows for Explore starter questions (last 24h / 7d windows, NL-friendly fields)
+    explore_docs = _explore_demo_fixture_runs(now)
+    if not args.dry_run and explore_docs:
+        db.test_runs.insert_many(explore_docs)
+
     # Guarantee every device ends on a green/pass so the fleet starts healthy
     final_runs = []
     for device in devices:
@@ -341,7 +712,7 @@ def main():
     if not args.dry_run:
         db.test_runs.insert_many(final_runs)
 
-    print(f" done ({len(runs):,} runs + {len(final_runs)} final-pass records)")
+    print(f" done ({len(runs):,} runs + {len(explore_docs)} explore fixtures + {len(final_runs)} final-pass records)")
 
     # Step 4: RAG seed failures with embeddings
     print("[4/5] Generating 10 historical PCIe failures for RAG demo...", end="", flush=True)

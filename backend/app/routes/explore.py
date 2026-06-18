@@ -323,7 +323,17 @@ async def explore_facets():
                 {"$count": "n"},
             ],
             "failure_modes_7d": [
-                {"$match": {"status": "fail", "started_at": {"$gte": since_7d}, "failure_mode": {"$ne": None}}},
+                {"$match": {
+                    "started_at": {"$gte": since_7d},
+                    "$or": [
+                        {"status": "fail", "failure_mode": {"$nin": [None, ""]}},
+                        {
+                            "status": "pass",
+                            "failure_mode": "silent",
+                            "results.components": {"$elemMatch": {"corruption_detected": True}},
+                        },
+                    ],
+                }},
                 {"$group": {"_id": "$failure_mode", "count": {"$sum": 1}}},
                 {"$sort": {"count": -1}},
             ],
