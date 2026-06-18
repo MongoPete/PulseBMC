@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
 import LiveClock from "@/components/LiveClock";
+import { SiemensWordmark } from "@/components/Brand";
 
 // Siemens corporate dark (#000028) header — matches TeamCenter / siemens.com nav
 const SIEMENS_DARK = "#000028";
@@ -46,18 +47,8 @@ export default function TopNav() {
       <div className="max-w-7xl mx-auto px-3 sm:px-4 h-12 flex items-center justify-between gap-2">
         {/* Brand — compact on phone, full lockup on sm+ */}
         <Link href="/" className="flex items-center gap-2 sm:gap-3 shrink-0 min-w-0">
-          <span
-            className="hidden sm:inline"
-            style={{
-              fontFamily: "Arial, sans-serif",
-              fontWeight: 700,
-              letterSpacing: "0.18em",
-              fontSize: "14px",
-              color: SIEMENS_PETROL,
-              textTransform: "uppercase",
-            }}
-          >
-            SIEMENS
+          <span className="hidden sm:inline-block shrink-0 leading-none">
+            <SiemensWordmark size={16} />
           </span>
           <span className="hidden sm:inline text-slate-500 text-sm">×</span>
           <span

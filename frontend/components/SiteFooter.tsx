@@ -1,6 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
+import { SiemensWordmark } from "@/components/Brand";
 import { SIEMENS_DARK, SIEMENS_PETROL, MONGODB_GREEN } from "@/lib/theme";
 
 export default function SiteFooter() {
@@ -12,15 +13,8 @@ export default function SiteFooter() {
       <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between flex-wrap gap-3">
         {/* Brand lockup */}
         <div className="flex items-center gap-3">
-          <span style={{
-            fontFamily: "Arial, sans-serif",
-            fontWeight: 700,
-            letterSpacing: "0.18em",
-            fontSize: "11px",
-            color: SIEMENS_PETROL,
-            textTransform: "uppercase",
-          }}>
-            SIEMENS
+          <span className="inline-block shrink-0 leading-none">
+            <SiemensWordmark size={12} />
           </span>
           <span className="text-slate-600 text-xs">×</span>
           <span style={{ fontFamily: "Arial, sans-serif", fontWeight: 700, fontSize: "11px", color: "#fff" }}>

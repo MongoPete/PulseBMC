@@ -1,19 +1,17 @@
+import Image from "next/image";
 import { SIEMENS_PETROL } from "@/lib/theme";
 
+/** Official Siemens wordmark (petrol on transparent). `size` is height in px; width scales with asset aspect ratio. */
 export function SiemensWordmark({ size = 12 }: { size?: number }) {
+  const w = Math.round(size * (1180 / 224));
   return (
-    <span
-      style={{
-        fontFamily: "Arial, sans-serif",
-        fontWeight: 700,
-        letterSpacing: "0.18em",
-        fontSize: `${size}px`,
-        color: SIEMENS_PETROL,
-        textTransform: "uppercase",
-      }}
-    >
-      SIEMENS
-    </span>
+    <Image
+      src="/siemens-logo-petrol.png"
+      alt="Siemens"
+      width={w}
+      height={size}
+      className="shrink-0"
+    />
   );
 }
 

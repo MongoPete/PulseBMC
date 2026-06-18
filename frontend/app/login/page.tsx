@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { signIn } from "next-auth/react";
-import { BrandLockup } from "@/components/Brand";
+import { BrandLockup, SiemensWordmark } from "@/components/Brand";
 import { SIEMENS_PETROL, SIEMENS_DARK } from "@/lib/theme";
 
 // ── "How it works" content ─────────────────────────────────────────────────
@@ -317,14 +317,9 @@ export default function LoginPage() {
                 <span className="text-xs font-bold" style={{ color: "#00ED64" }}>MongoDB Atlas</span>
               </div>
               <div className="flex items-center gap-2">
-                <span style={{
-                  fontFamily: "Arial, sans-serif",
-                  fontWeight: 700,
-                  letterSpacing: "0.18em",
-                  fontSize: "11px",
-                  color: SIEMENS_PETROL,
-                  textTransform: "uppercase",
-                }}>SIEMENS</span>
+                <span className="inline-block shrink-0 leading-none">
+                  <SiemensWordmark size={12} />
+                </span>
                 <span className="text-slate-300 text-xs">·</span>
                 <span className="text-[11px] text-slate-500">Software</span>
               </div>
