@@ -21,6 +21,7 @@ interface ExploreResult {
   data: Record<string, unknown>[];
   total: number;
   duration_ms: number;
+  cached?: boolean;
   query_info: {
     collection: string;
     operation: string;
@@ -29,6 +30,7 @@ interface ExploreResult {
     sql_equivalent: string;
     query_strategy?: string;
     performance_note?: string;
+    optimization?: "pinned" | "llm";
   };
 }
 
@@ -610,6 +612,15 @@ export default function ExplorePage() {
               <span className="font-medium text-slate-700">{result.total} result{result.total !== 1 ? "s" : ""}</span>
               <span>·</span>
               <span>{result.duration_ms}ms</span>
+              {result.cached ? (
+                <span className="text-[10px] font-mono bg-slate-100 border border-slate-200 text-slate-600 px-1.5 py-0.5 rounded" title="Served from the result cache — no LLM or Atlas round-trip">
+                  cached
+                </span>
+              ) : result.query_info?.optimization === "pinned" ? (
+                <span className="text-[10px] font-mono bg-emerald-50 border border-emerald-200 text-emerald-700 px-1.5 py-0.5 rounded" title="Pinned canonical pipeline — runs directly against Atlas, no LLM translation">
+                  pinned · no LLM
+                </span>
+              ) : null}
               <span>·</span>
               <span>
                 collection: <span className="font-mono font-medium text-slate-700">{result.query_info?.collection}</span>
